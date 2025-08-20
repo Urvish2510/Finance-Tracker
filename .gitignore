@@ -33,9 +33,8 @@ jspm_packages/
 .env.test.local
 
 # Keep template environment files but ignore local ones
-!.env.development
-!.env.production  
-!.env.test
+.env.development
+.env.production  
 .env.development.local
 .env.production.local
 .env.test.local

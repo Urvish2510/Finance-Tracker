@@ -333,41 +333,54 @@ export class SettingsService {
   }
 }
 
-// Health check with environment-aware configuration
-export const checkApiHealth = async () => {
-  try {
-    const apiConfig = config.getApiConfig()
-    const healthUrl = apiConfig.baseURL.replace('/api', '/health')
-    
-    if (isDev) {
-      console.log('🔍 Checking API health at:', healthUrl)
-    }
-    
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000) // Quick health check timeout
-    
-    const response = await fetch(healthUrl, {
-      signal: controller.signal,
-      headers: {
-        'X-Health-Check': 'true',
-        'X-App-Environment': config.env
+// Health check with environment-aware configuration and retry logic
+export const checkApiHealth = async (maxRetries = 2) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const apiConfig = config.getApiConfig()
+      const healthUrl = apiConfig.baseURL.replace('/api', '/health')
+      
+      if (isDev) {
+        console.log(`🔍 Checking API health (attempt ${attempt}/${maxRetries}):`, healthUrl)
       }
-    })
-    
-    clearTimeout(timeoutId)
-    const isHealthy = response.ok
-    
-    if (isDev) {
-      console.log(isHealthy ? '✅ API is healthy' : '❌ API health check failed')
+      
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000) // 3 second timeout
+      
+      const response = await fetch(healthUrl, {
+        signal: controller.signal,
+        headers: {
+          'X-Health-Check': 'true',
+          'X-App-Environment': config.env
+        }
+      })
+      
+      clearTimeout(timeoutId)
+      
+      if (response.ok) {
+        if (isDev) {
+          const healthData = await response.json()
+          console.log('✅ API is healthy:', healthData.status)
+        }
+        return true
+      } else {
+        throw new Error(`Health check failed: ${response.status}`)
+      }
+    } catch (error) {
+      if (isDev) {
+        console.warn(`⚠️ API health check attempt ${attempt} failed:`, error.message)
+      }
+      
+      if (attempt === maxRetries) {
+        return false
+      }
+      
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 1000))
     }
-    
-    return isHealthy
-  } catch (error) {
-    if (isDev) {
-      console.warn('⚠️ API health check failed:', error.message)
-    }
-    return false
   }
+  
+  return false
 }
 
 // Service instances

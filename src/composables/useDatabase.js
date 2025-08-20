@@ -15,15 +15,24 @@ const categoryService = new CategoryService()
 const expenseService = new ExpenseService()
 
 // Check API availability on startup
-const initializeAPI = async () => {
+const initializeAPI = async (retryCount = 0) => {
   connectionLoading.value = true
   try {
+    console.log('🔍 Initializing API connection...')
     apiAvailable.value = await checkApiHealth()
     connectionError.value = null
+    
     if (!apiAvailable.value) {
       const errorMessage = 'API server is not responding. Please check if the backend server is running.'
       connectionError.value = errorMessage
       console.error('❌ API not available - backend server may not be running')
+      
+      // Retry once after a delay for page refreshes
+      if (retryCount === 0) {
+        console.log('🔄 Retrying API connection in 2 seconds...')
+        setTimeout(() => initializeAPI(1), 2000)
+        return
+      }
     } else {
       console.log('✅ API connection established')
     }
