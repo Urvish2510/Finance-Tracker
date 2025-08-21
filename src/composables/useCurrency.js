@@ -18,7 +18,7 @@ export const useCurrency = () => {
       precision = 2
     } = options;
 
-    if (amount === null || amount === undefined) {
+    if (amount === null || amount === undefined || amount === '') {
       amount = 0;
     }
 

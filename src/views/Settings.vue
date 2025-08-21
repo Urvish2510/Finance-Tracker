@@ -111,6 +111,10 @@
             <span>{{ stats.totalExpenses }}</span>
           </div>
           <div class="info-item">
+            <strong>Total Deposits:</strong>
+            <span>{{ stats.totalDeposits }}</span>
+          </div>
+          <div class="info-item">
             <strong>Total Categories:</strong>
             <span>{{ stats.totalCategories }}</span>
           </div>
@@ -158,17 +162,25 @@
 
 <script setup>
 import { ref, onMounted, computed } from "vue";
-import {
-  useDatabase,
-  useExpenses,
-  useCategories,
-} from "../composables/useDatabase.js";
+import { useGlobalStore } from "../composables/useGlobalStore.js";
 import { useToast } from "../composables/useToast.js";
 
-// Composables
-const { apiAvailable } = useDatabase();
-const { expenses, fetchExpenses, deleteExpense } = useExpenses();
-const { categories, fetchCategories, deleteCategory } = useCategories();
+// Use global store
+const { 
+  categories,
+  expenses, 
+  deposits,
+  isConnected,
+  loadCategories,
+  loadExpenses,
+  loadDeposits,
+  deleteCategory,
+  deleteExpense,
+  deleteDeposit,
+  clearAllData,
+  initialize
+} = useGlobalStore()
+
 const { success, error: showError, info, warning } = useToast();
 
 // Reactive data
@@ -187,10 +199,13 @@ const appInfo = ref({
 });
 
 // Computed properties
+const apiAvailable = computed(() => isConnected.value);
+
 const stats = computed(() => {
   return {
     totalExpenses: expenses.value.length,
     totalCategories: categories.value.length,
+    totalDeposits: deposits.value.length,
   };
 });
 
@@ -227,14 +242,17 @@ const exportData = async (format) => {
     loading.value = true;
     loadingMessage.value = `Exporting data as ${format.toUpperCase()}...`;
     
-    // Only fetch if API is available
-    if (apiAvailable.value) {
+    // Ensure we have latest data from global store
+    if (isConnected.value) {
       try {
-        await fetchExpenses();
-        await fetchCategories();
+        await Promise.all([
+          loadExpenses(),
+          loadCategories(),
+          loadDeposits()
+        ]);
       } catch (error) {
         console.warn('Failed to fetch latest data for export:', error);
-        // Continue with existing data
+        warning('Using cached data for export');
       }
     }
 
@@ -263,6 +281,7 @@ const exportData = async (format) => {
           currency: { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
           expenses: expenses.value,
           categories: categories.value,
+          deposits: deposits.value,
           settings: localSettings.value
         },
         null,
@@ -295,33 +314,17 @@ const resetAllData = async () => {
     loading.value = true;
     loadingMessage.value = 'Clearing all data...';
     
-    if (!apiAvailable.value) {
+    if (!isConnected.value) {
       showError('Cannot clear data: API server is not available');
       return;
     }
     
-    // Clear all expenses
-    if (expenses.value && expenses.value.length > 0) {
-      const deletePromises = expenses.value.map((expense) =>
-        deleteExpense(expense._id || expense.id)
-      );
-      await Promise.all(deletePromises);
-    }
-
-    // Clear all categories  
-    if (categories.value && categories.value.length > 0) {
-      const deleteCategoryPromises = categories.value.map((category) =>
-        deleteCategory(category._id || category.id)
-      );
-      await Promise.all(deleteCategoryPromises);
-    }
-
+    // Use global store method to clear all data
+    await clearAllData();
+    
     showResetDialog.value = false;
     success("All data cleared successfully");
-
-    // Refresh data
-    await fetchExpenses();
-    await fetchCategories();
+    
   } catch (error) {
     console.error("Reset error:", error);
     showError("Failed to clear data: " + error.message);
@@ -332,19 +335,25 @@ const resetAllData = async () => {
 
 // Initialize
 onMounted(async () => {
+  console.log('⚙️ Settings view mounted');
+  
   try {
     loading.value = true;
     loadingMessage.value = 'Loading settings...';
+    
+    // Ensure global store is initialized
+    await initialize();
     
     loadLocalSettings();
     applyTheme();
     
     // Load data for stats if API is available
-    if (apiAvailable.value) {
+    if (isConnected.value) {
       try {
         await Promise.all([
-          fetchExpenses(),
-          fetchCategories()
+          loadExpenses(),
+          loadCategories(),
+          loadDeposits()
         ]);
       } catch (error) {
         console.warn('Failed to load data from API:', error);
@@ -352,8 +361,9 @@ onMounted(async () => {
       }
     }
     
+    console.log('✅ Settings view loaded from global store!');
   } catch (error) {
-    console.error('Error initializing settings:', error);
+    console.error('❌ Error initializing settings:', error);
     showError('Failed to load settings');
   } finally {
     loading.value = false;

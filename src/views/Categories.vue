@@ -15,7 +15,7 @@
           <p>Manage and organize your expense categories</p>
         </div>
         <div class="list-actions">
-          <button @click="loadCategories" :disabled="categoriesLoading" class="refresh-btn">
+          <button @click="handleLoadCategories(true)" :disabled="categoriesLoading" class="refresh-btn">
             {{ categoriesLoading ? 'Loading...' : '🔄 Refresh' }}
           </button>
           <input 
@@ -62,29 +62,30 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useCategories, useExpenses } from '../composables/useDatabase.js'
-import { useToast } from '../composables/useToast.js'
+import { useGlobalStore } from '../composables/useGlobalStore.js'
 import CategoryForm from '../components/CategoryForm.vue'
 import CategoryCard from '../components/CategoryCard.vue'
 import CategoryEditModal from '../components/CategoryEditModal.vue'
 import ErrorMessage from '../components/ErrorMessage.vue'
 import EmptyState from '../components/EmptyState.vue'
 
-// Composables
-const { success, error: showError } = useToast()
-const { 
-  categories, 
-  loading: categoriesLoading, 
-  error: categoriesError, 
-  fetchCategories, 
-  addCategory, 
-  updateCategory: updateCategoryService,
-  deleteCategory: deleteCategoryService 
-} = useCategories()
+// Global Store
+const {
+  categories,
+  categoriesLoading,
+  categoriesError,
+  expenses,
+  isConnected,
+  loadCategories,
+  loadExpenses,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  getCategoryStats,
+  initialize
+} = useGlobalStore()
 
-const { expenses, fetchExpenses } = useExpenses()
-
-// State
+// Local state
 const searchQuery = ref('')
 const editingCategory = ref(null)
 
@@ -106,25 +107,13 @@ const filteredCategories = computed(() => {
 })
 
 // Methods
-const loadCategories = async () => {
+const handleLoadCategories = async (force = false) => {
   try {
     console.log('🔄 Loading categories...')
-    await fetchCategories()
+    await loadCategories(force)
     console.log('✅ Categories loaded successfully')
   } catch (error) {
     console.error('❌ Failed to load categories:', error.message)
-    showError(`Failed to load categories: ${error.message}`)
-  }
-}
-
-const loadExpenses = async () => {
-  try {
-    console.log('🔄 Loading expenses...')
-    await fetchExpenses()
-    console.log('✅ Expenses loaded successfully')
-  } catch (error) {
-    console.error('❌ Failed to load expenses:', error.message)
-    // Don't show error for expenses as it's secondary data
   }
 }
 
@@ -137,11 +126,11 @@ const resetForm = () => {
 
 const handleAddCategory = async () => {
   try {
-    await addCategory({ ...newCategory })
+    await createCategory({ ...newCategory })
     resetForm()
-    success('Category created successfully!')
   } catch (error) {
-    showError(`Failed to create category: ${error.message}`)
+    // Error is already handled by global store
+    console.error('Failed to create category:', error)
   }
 }
 
@@ -151,11 +140,11 @@ const handleEditCategory = (category) => {
 
 const handleUpdateCategory = async (updatedCategory) => {
   try {
-    await updateCategoryService(updatedCategory._id, updatedCategory)
+    await updateCategory(updatedCategory._id, updatedCategory)
     editingCategory.value = null
-    success('Category updated successfully!')
   } catch (error) {
-    showError(`Failed to update category: ${error.message}`)
+    // Error is already handled by global store
+    console.error('Failed to update category:', error)
   }
 }
 
@@ -170,60 +159,32 @@ const handleDeleteCategory = async (categoryId) => {
   if (!confirm(message)) return
   
   try {
-    await deleteCategoryService(categoryId)
-    success('Category deleted successfully!')
+    await deleteCategory(categoryId)
   } catch (error) {
-    showError(`Failed to delete category: ${error.message}`)
+    // Error is already handled by global store
+    console.error('Failed to delete category:', error)
   }
 }
 
-const getCategoryStats = (categoryId) => {
-  const categoryExpenses = expenses.value.filter(expense => expense.category._id === categoryId)
-  const count = categoryExpenses.length
-  const total = categoryExpenses.reduce((sum, expense) => sum + expense.amount, 0)
-  const average = count > 0 ? total / count : 0
-  const recent = categoryExpenses
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .slice(0, 3)
-  
-  return { count, total, average, recent }
-}
-
-// Load data on mount
+// Initialize on mount
 onMounted(async () => {
   console.log('📋 Categories page mounting...')
   
   try {
-    // Wait a bit for servers to be ready if just refreshed
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // Ensure global store is initialized
+    await initialize()
     
-    // Load data with retry logic
-    await loadDataWithRetry()
+    // Load data (will use cache if fresh)
+    await Promise.all([
+      loadCategories(),
+      loadExpenses()
+    ])
+    
+    console.log('✅ Categories page initialized with global store')
   } catch (error) {
-    console.error('Error loading categories data:', error)
-    showError(`Failed to load data: ${error.message}. Please ensure the backend server is running and MongoDB is connected.`)
+    console.error('❌ Failed to initialize categories page:', error)
   }
 })
-
-const loadDataWithRetry = async (maxRetries = 3) => {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`📋 Loading data (attempt ${attempt}/${maxRetries})...`)
-      await Promise.all([loadCategories(), loadExpenses()])
-      console.log('✅ Categories page data loaded successfully!')
-      return
-    } catch (error) {
-      console.warn(`⚠️ Attempt ${attempt} failed:`, error.message)
-      
-      if (attempt === maxRetries) {
-        throw error
-      }
-      
-      // Wait before retry
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
-    }
-  }
-}
 </script>
 
 <style scoped>

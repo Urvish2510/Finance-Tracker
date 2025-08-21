@@ -7,13 +7,20 @@ const connectDB = async () => {
     const safeUri = mongoUri ? mongoUri.replace(/:([^:@]+)@/, ':***@') : 'NOT FOUND';
     console.log(`🔗 Connecting to MongoDB: ${safeUri}`);
 
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    if (!mongoUri) {
+      console.log('⚠️ No MongoDB URI provided - running in memory-only mode');
+      console.log('📝 Data will not persist between server restarts');
+      return null; // Return null to indicate in-memory mode
+    }
+
+    const conn = await mongoose.connect(mongoUri);
     console.log(`📚 Database: ${conn.connection.name}`);
 
     return conn;
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
-    process.exit(1);
+    console.log('⚠️ Falling back to in-memory mode - data will not persist');
+    return null; // Return null to indicate fallback to in-memory mode
   }
 };
 
@@ -32,8 +39,10 @@ mongoose.connection.on('disconnected', () => {
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  await mongoose.connection.close();
-  console.log('🛑 MongoDB connection closed through app termination');
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.close();
+    console.log('🛑 MongoDB connection closed through app termination');
+  }
   process.exit(0);
 });
 

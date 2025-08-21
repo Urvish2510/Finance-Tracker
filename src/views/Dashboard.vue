@@ -189,26 +189,28 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
-import {
-  useExpenses,
-  useCategories,
-  useDatabase,
-} from "../composables/useDatabase.js";
+import { useGlobalStore } from "../composables/useGlobalStore.js";
 import { useCurrency } from "../composables/useCurrency.js";
-import { useToast } from "../composables/useToast.js";
-import { apiService } from "../services/apiService.js";
 
-// Use composables
-const { expenses, fetchExpenses } = useExpenses();
-const { categories, fetchCategories } = useCategories();
-const { apiAvailable, connectionError, connectionLoading, retryConnection } = useDatabase();
+// Global Store
+const {
+  categories,
+  expenses,
+  deposits,
+  isConnected,
+  isLoading: connectionLoading,
+  connectionError,
+  loadCategories,
+  loadExpenses,
+  loadDeposits,
+  initialize
+} = useGlobalStore()
+
 const { formatCurrency, loadSettings } = useCurrency();
-const { success, error: showError, info } = useToast();
 
 // Local state
 const loading = ref(true);
 const dashboardSummary = ref({});
-const deposits = ref([]);
 
 // Development mode flag
 const isDevelopment = ref(import.meta.env.DEV);
@@ -335,150 +337,76 @@ const formatRelativeDate = (dateStr) => {
   return date.toLocaleDateString();
 };
 
-// Fetch deposits
-const fetchDeposits = async () => {
-  try {
-    const response = await apiService.get("/deposits");
-    // API returns the array directly
-    deposits.value = Array.isArray(response) ? response : [];
-    console.log('Fetched deposits:', deposits.value.length, 'deposits');
-  } catch (err) {
-    console.error("Error fetching deposits:", err);
-    // Don't throw error as it's not critical for dashboard
-  }
-};
-
 // Get dashboard summary including deposits
-const getDashboardSummaryWithDeposits = async () => {
-  try {
-    // Calculate basic summary from local data
-    const totalDeposits = deposits.value.reduce(
-      (sum, deposit) => sum + deposit.amount,
-      0
-    );
-    
-    const totalExpenses = expenses.value.reduce(
-      (sum, expense) => sum + expense.amount,
-      0
-    );
-    
-    const currentMonth = new Date().getMonth();
-    const currentYear = new Date().getFullYear();
-
-    const monthlyDeposits = deposits.value
-      .filter((deposit) => {
-        const depositDate = new Date(deposit.date);
-        return (
-          depositDate.getMonth() === currentMonth &&
-          depositDate.getFullYear() === currentYear
-        );
-      })
-      .reduce((sum, deposit) => sum + deposit.amount, 0);
-      
-    const monthlyExpenses = expenses.value
-      .filter((expense) => {
-        const expenseDate = new Date(expense.date);
-        return (
-          expenseDate.getMonth() === currentMonth &&
-          expenseDate.getFullYear() === currentYear
-        );
-      })
-      .reduce((sum, expense) => sum + expense.amount, 0);
-
-    console.log('Dashboard Summary Debug:', {
-      depositsCount: deposits.value.length,
-      totalDeposits,
-      monthlyDeposits,
-      totalExpenses,
-      monthlyExpenses
-    });
-
-    return {
-      totalExpenses,
-      totalDeposits,
-      depositsCount: deposits.value.length,
-      monthlyDeposits,
-      transactionCount: expenses.value.length + deposits.value.length,
-      categoriesCount: categories.value.length,
-      avgExpense: expenses.value.length > 0 ? totalExpenses / expenses.value.length : 0,
-      monthlyChange: {
-        percentage: 0, // Simplified - no comparison
-        direction: 'stable',
-        amount: 0
-      },
-      weeklyTransactionChange: {
-        count: 0,
-        direction: 'stable'
-      },
-      avgExpenseChange: {
-        percentage: 0,
-        direction: 'stable',
-        amount: 0
-      },
-      currentMonth: {
-        total: monthlyExpenses,
-        count: expenses.value.filter(expense => {
-          const expenseDate = new Date(expense.date);
-          return expenseDate.getMonth() === currentMonth && expenseDate.getFullYear() === currentYear;
-        }).length,
-        average: 0
-      },
-      previousMonth: {
-        total: 0,
-        count: 0,
-        average: 0
-      },
-      thisWeek: {
-        count: 0
-      },
-      previousWeek: {
-        count: 0
-      },
-      depositChange: {
-        percentage: 0,
-      },
-    };
-  } catch (err) {
-    console.error("Error getting dashboard summary:", err);
-    const fallbackTotalDeposits = deposits.value.reduce(
-      (sum, deposit) => sum + deposit.amount,
-      0
-    );
-    
-    console.log('Using fallback summary with deposits:', fallbackTotalDeposits);
-    
-    return {
-      totalExpenses: expenses.value.reduce((sum, expense) => sum + expense.amount, 0),
-      totalDeposits: fallbackTotalDeposits,
-      transactionCount: expenses.value.length + deposits.value.length,
-      categoriesCount: categories.value.length,
-      avgExpense: 0,
-      monthlyChange: { percentage: 0, direction: 'stable', amount: 0 },
-      weeklyTransactionChange: { count: 0, direction: 'stable' },
-      avgExpenseChange: { percentage: 0, direction: 'stable', amount: 0 },
-      depositChange: { percentage: 0 },
-    };
-  }
-};
-
-// Error handling
-const handleRetryConnection = async () => {
-  loading.value = true;
+const getDashboardSummary = () => {
+  const totalDeposits = deposits.value.reduce(
+    (sum, deposit) => sum + deposit.amount,
+    0
+  );
   
-  try {
-    info("Attempting to reconnect to server...");
-    const success_result = await retryConnection();
-    if (success_result) {
-      await loadData();
-      success("Successfully connected to server!");
-    } else {
-      showError("Failed to connect to server. Please check if the backend is running.");
-    }
-  } catch (err) {
-    showError(`Connection failed: ${err.message}`);
-  } finally {
-    loading.value = false;
-  }
+  const totalExpenses = expenses.value.reduce(
+    (sum, expense) => sum + expense.amount,
+    0
+  );
+  
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
+  const monthlyDeposits = deposits.value
+    .filter((deposit) => {
+      const depositDate = new Date(deposit.date);
+      return (
+        depositDate.getMonth() === currentMonth &&
+        depositDate.getFullYear() === currentYear
+      );
+    })
+    .reduce((sum, deposit) => sum + deposit.amount, 0);
+    
+  const monthlyExpenses = expenses.value
+    .filter((expense) => {
+      const expenseDate = new Date(expense.date);
+      return (
+        expenseDate.getMonth() === currentMonth &&
+        expenseDate.getFullYear() === currentYear
+      );
+    })
+    .reduce((sum, expense) => sum + expense.amount, 0);
+
+  console.log('Dashboard Summary:', {
+    depositsCount: deposits.value.length,
+    totalDeposits,
+    monthlyDeposits,
+    totalExpenses,
+    monthlyExpenses,
+    categoriesCount: categories.value.length
+  });
+
+  return {
+    totalExpenses,
+    totalDeposits,
+    depositsCount: deposits.value.length,
+    monthlyDeposits,
+    transactionCount: expenses.value.length + deposits.value.length,
+    categoriesCount: categories.value.length,
+    avgExpense: expenses.value.length > 0 ? totalExpenses / expenses.value.length : 0,
+    monthlyChange: {
+      percentage: 0, // Simplified - no comparison
+      direction: 'stable',
+      amount: 0
+    },
+    weeklyTransactionChange: {
+      count: 0,
+      direction: 'stable'
+    },
+    avgExpenseChange: {
+      percentage: 0,
+      direction: 'stable',
+      amount: 0
+    },
+    depositChange: {
+      percentage: 0,
+    },
+  };
 };
 
 // Load data
@@ -489,18 +417,18 @@ const loadData = async () => {
     // Load currency settings first
     await loadSettings();
 
-    // Fetch all data in parallel
-    await Promise.all([fetchExpenses(), fetchCategories(), fetchDeposits()]);
+    // Load all data (will use cache if fresh)
+    await Promise.all([
+      loadCategories(),
+      loadExpenses(), 
+      loadDeposits()
+    ]);
 
-    // Get dashboard summary with calculations including deposits
-    const summary = await getDashboardSummaryWithDeposits();
-    console.log('✅ Final dashboard summary:', summary);
-
-    dashboardSummary.value = summary;
+    // Calculate dashboard summary
+    dashboardSummary.value = getDashboardSummary();
+    console.log('✅ Dashboard data loaded from global store');
   } catch (err) {
     console.error("❌ Error loading dashboard data:", err);
-    // Show a toast but don't block the UI
-    showError(`Failed to load some dashboard data: ${err.message}`);
     
     // Set fallback data so the UI still works
     dashboardSummary.value = {
@@ -520,55 +448,22 @@ const loadData = async () => {
 // Initialize data
 onMounted(async () => {
   console.log('📱 Dashboard mounted');
+  loading.value = true;
   
   try {
-    // Wait for connection loading to complete if still in progress
-    if (connectionLoading.value) {
-      console.log('⏳ Waiting for connection to establish...');
-      // Watch for connection loading to complete
-      const unwatch = watch(connectionLoading, (newLoading) => {
-        if (!newLoading) {
-          unwatch();
-          initializeDashboard();
-        }
-      });
-    } else {
-      // Connection check already completed
-      await initializeDashboard();
-    }
+    // Ensure global store is initialized
+    await initialize();
+    
+    // Load dashboard data
+    await loadData();
   } catch (err) {
     console.error('❌ Dashboard initialization error:', err);
-    // Don't show error UI, just log it and show fallback data
-    showError('Dashboard initialization failed, showing fallback data');
   } finally {
     loading.value = false;
   }
 });
 
-const initializeDashboard = async () => {
-  console.log('🚀 Initializing dashboard...');
-  
-  if (apiAvailable.value) {
-    console.log('✅ API available, loading data...');
-    await loadData();
-  } else {
-    console.log('⚠️ API not available, showing empty state');
-    // Don't show error, just initialize with empty data
-    dashboardSummary.value = {
-      totalExpenses: 0,
-      totalDeposits: 0,
-      transactionCount: 0,
-      categoriesCount: 0,
-      avgExpense: 0,
-      monthlyChange: { percentage: 0, direction: 'stable', amount: 0 },
-      weeklyTransactionChange: { count: 0, direction: 'stable' },
-      avgExpenseChange: { percentage: 0, direction: 'stable', amount: 0 },
-      depositChange: { percentage: 0 },
-    };
-  }
-};
-
-console.log("Dashboard loaded successfully!");
+console.log("Dashboard loaded with global state management!");
 </script>
 
 <style scoped>

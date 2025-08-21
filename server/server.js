@@ -36,8 +36,16 @@ const logger = {
   error: (...args) => console.error('❌', ...args),
 };
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB (gracefully handle failure)
+connectDB().then(dbConnection => {
+  if (dbConnection) {
+    console.log('✅ Database connection established');
+  } else {
+    console.log('⚠️ Running without persistent database - data will be stored in memory');
+  }
+}).catch(error => {
+  console.warn('⚠️ Database connection failed, continuing in in-memory mode:', error.message);
+});
 
 // Environment-specific CORS configuration
 const corsOrigins = process.env.CORS_ORIGIN 

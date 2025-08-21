@@ -162,7 +162,7 @@
               <button @click="editDeposit(deposit)" class="action-btn edit-btn">
                 ✏️
               </button>
-              <button @click="deleteDeposit(deposit._id)" class="action-btn delete-btn">
+              <button @click="handleDeleteDeposit(deposit._id)" class="action-btn delete-btn">
                 🗑️
               </button>
             </div>
@@ -175,16 +175,27 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useGlobalStore } from '../composables/useGlobalStore.js';
 import { useCurrency } from '../composables/useCurrency.js';
 import { useToast } from '../composables/useToast.js';
-import { apiService } from '../services/apiService.js';
+
+// Use global store
+const { 
+  categories, 
+  deposits, 
+  isLoading,
+  loadCategories,
+  loadDeposits,
+  createDeposit,
+  updateDeposit,
+  deleteDeposit,
+  initialize 
+} = useGlobalStore()
 
 const { formatCurrency } = useCurrency();
-const { showToast } = useToast();
+const { success, error: showError } = useToast();
 
 // State
-const deposits = ref([]);
-const incomeCategories = ref([]);
 const loading = ref(true);
 const saving = ref(false);
 const showForm = ref(false);
@@ -201,10 +212,15 @@ const form = ref({
 });
 
 // Computed
+const incomeCategories = computed(() => 
+  categories.value.filter(cat => cat.type === 'income')
+);
+
 const filteredDeposits = computed(() => {
   if (!filterCategory.value) return deposits.value;
   return deposits.value.filter(deposit => 
-    deposit.category._id === filterCategory.value
+    deposit.category?._id === filterCategory.value ||
+    deposit.category_id === filterCategory.value
   );
 });
 
@@ -230,31 +246,6 @@ const averageIncome = computed(() => {
 });
 
 // Methods
-const fetchDeposits = async () => {
-  try {
-    loading.value = true;
-    const response = await apiService.get('/deposits');
-    // API returns the array directly
-    deposits.value = Array.isArray(response) ? response : [];
-  } catch (error) {
-    console.error('Error fetching deposits:', error);
-    showToast('Failed to fetch deposits', 'error');
-  } finally {
-    loading.value = false;
-  }
-};
-
-const fetchIncomeCategories = async () => {
-    try {
-        const response = await apiService.get('/categories?type=income');
-        // API returns the array directly
-        incomeCategories.value = Array.isArray(response) ? response : [];
-    } catch (error) {
-        console.error('Error fetching categories:', error);
-        showToast('Failed to fetch categories', 'error');
-    }
-};
-
 const showAddForm = () => {
   resetForm();
   showForm.value = true;
@@ -289,18 +280,17 @@ const saveDeposit = async () => {
     };
 
     if (editingDeposit.value) {
-      await apiService.put(`/deposits/${editingDeposit.value._id}`, depositData);
-      showToast('Deposit updated successfully!', 'success');
+      await updateDeposit(editingDeposit.value._id, depositData);
+      success('Deposit updated successfully!');
     } else {
-      await apiService.post('/deposits', depositData);
-      showToast('Deposit added successfully!', 'success');
+      await createDeposit(depositData);
+      success('Deposit added successfully!');
     }
 
     hideForm();
-    fetchDeposits();
   } catch (error) {
     console.error('Error saving deposit:', error);
-    showToast('Failed to save deposit', 'error');
+    showError('Failed to save deposit');
   } finally {
     saving.value = false;
   }
@@ -311,23 +301,22 @@ const editDeposit = (deposit) => {
   form.value = {
     title: deposit.title,
     amount: deposit.amount,
-    categoryId: deposit.category._id,
+    categoryId: deposit.category?._id || deposit.category_id || '',
     date: new Date(deposit.date).toISOString().split('T')[0],
     description: deposit.description || ''
   };
   showForm.value = true;
 };
 
-const deleteDeposit = async (depositId) => {
+const handleDeleteDeposit = async (depositId) => {
   if (!confirm('Are you sure you want to delete this deposit?')) return;
   
   try {
-    await apiService.delete(`/deposits/${depositId}`);
-    showToast('Deposit deleted successfully!', 'success');
-    fetchDeposits();
+    await deleteDeposit(depositId);
+    success('Deposit deleted successfully!');
   } catch (error) {
     console.error('Error deleting deposit:', error);
-    showToast('Failed to delete deposit', 'error');
+    showError('Failed to delete deposit');
   }
 };
 
@@ -348,9 +337,28 @@ const filterDeposits = () => {
 };
 
 // Lifecycle
-onMounted(() => {
-  fetchDeposits();
-  fetchIncomeCategories();
+onMounted(async () => {
+  console.log('💰 Deposits view mounted');
+  
+  try {
+    loading.value = true;
+    
+    // Ensure global store is initialized
+    await initialize()
+    
+    // Load data from global store (will use cache if fresh)
+    await Promise.all([
+      loadCategories(),
+      loadDeposits()
+    ])
+    
+    console.log('✅ Deposits view loaded from global store!');
+  } catch (error) {
+    console.error('❌ Error loading deposits data:', error);
+    showError(`Failed to load data: ${error.message}`);
+  } finally {
+    loading.value = false;
+  }
 });
 </script>
 

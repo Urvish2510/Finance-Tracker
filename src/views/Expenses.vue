@@ -178,13 +178,23 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useExpenses, useCategories } from '../composables/useDatabase.js'
+import { useGlobalStore } from '../composables/useGlobalStore.js'
 import { useCurrency } from '../composables/useCurrency.js'
 import { useToast } from '../composables/useToast.js'
 
-// Use composables
-const { expenses, loading: expensesLoading, fetchExpenses, addExpense, updateExpense, deleteExpense } = useExpenses()
-const { categories, fetchCategories } = useCategories()
+// Use global store
+const { 
+  categories, 
+  expenses, 
+  isLoading,
+  loadCategories,
+  loadExpenses,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+  initialize 
+} = useGlobalStore()
+
 const { formatCurrency, getCurrencySymbol, loadSettings } = useCurrency()
 const { success, error: showError, warning } = useToast()
 
@@ -203,12 +213,6 @@ const newExpense = reactive({
   description: ''
 })
 
-// Helper function to get category name from ID
-const getCategoryName = (categoryId) => {
-  const category = categories.value.find(cat => cat._id === categoryId)
-  return category ? `${category.icon} ${category.name}` : 'Uncategorized'
-}
-
 // Computed properties
 const filteredExpenses = computed(() => {
   let filtered = expenses.value
@@ -225,7 +229,8 @@ const filteredExpenses = computed(() => {
   // Filter by category
   if (selectedCategory.value) {
     filtered = filtered.filter(expense => 
-      expense.category_id.toString() === selectedCategory.value
+      expense.category_id?.toString() === selectedCategory.value ||
+      expense.category?._id?.toString() === selectedCategory.value
     )
   }
 
@@ -260,7 +265,7 @@ const addNewExpense = async () => {
       description: newExpense.description
     }
     
-    await addExpense(expenseData)
+    await createExpense(expenseData)
     clearForm()
     success('Expense added successfully!')
   } catch (error) {
@@ -282,7 +287,7 @@ const editExpense = (expense) => {
   // For now, just populate the form
   newExpense.title = expense.title
   newExpense.amount = expense.amount.toString()
-  newExpense.category = expense.category?._id || ''
+  newExpense.category = expense.category?._id || expense.category_id || ''
   newExpense.date = expense.date
   newExpense.description = expense.description || ''
   
@@ -311,24 +316,31 @@ const formatDate = (dateString) => {
 
 const getCategoryDisplay = (expense) => {
   if (expense.category) {
-    return `${expense.category.icon || '�'} ${expense.category.name}`
+    return `${expense.category.icon || '📦'} ${expense.category.name}`
   }
   return 'Uncategorized'
 }
 
 // Initialize
 onMounted(async () => {
+  console.log('📝 Expenses view mounted');
+  
   try {
+    // Ensure global store is initialized
+    await initialize()
+    
     // Load currency settings first
     await loadSettings()
     
+    // Load data from global store (will use cache if fresh)
     await Promise.all([
-      fetchExpenses(),
-      fetchCategories()
+      loadCategories(),
+      loadExpenses()
     ])
-    console.log('Expenses view loaded!')
+    
+    console.log('✅ Expenses view loaded from global store!')
   } catch (error) {
-    console.error('Error loading expenses data:', error)
+    console.error('❌ Error loading expenses data:', error)
     showError(`Failed to load data: ${error.message}. Please ensure the backend server is running and MongoDB is connected.`)
   }
 })

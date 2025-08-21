@@ -16,7 +16,13 @@
     "seed:dev": "cross-env NODE_ENV=development node server/seedDatabase.js",
     "seed:prod": "cross-env NODE_ENV=production node server/seedDatabase.js",
     "start": "npm run server:prod",
-    "deploy": "npm run build && npm run start"
+    "deploy": "npm run build && npm run start",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:server": "vitest run --config vitest.config.server.js",
+    "test:client": "vitest run --config vitest.config.client.js"
   },
   "dependencies": {
     "chart.js": "^4.5.0",
@@ -30,12 +36,20 @@
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/vue": "^8.1.0",
     "@vitejs/plugin-vue": "^6.0.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vue/test-utils": "^2.4.6",
     "concurrently": "^9.2.0",
     "cross-env": "^10.0.0",
+    "happy-dom": "^18.0.1",
+    "jsdom": "^26.1.0",
     "nodemon": "^3.1.10",
+    "supertest": "^7.1.4",
     "terser": "^5.43.1",
     "vite": "^7.0.0",
-    "vite-plugin-vue-devtools": "^7.7.7"
+    "vite-plugin-vue-devtools": "^7.7.7",
+    "vitest": "^3.2.4"
   }
 }
