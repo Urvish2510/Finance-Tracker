@@ -1,26 +1,19 @@
 <template>
   <teleport to="body">
-    <div class="toast-container">
-      <transition-group name="toast" tag="div">
+    <div class="t-container" aria-live="assertive" aria-atomic="true">
+      <transition-group name="t-fade" tag="div" class="t-list">
         <div
-          v-for="toast in toasts"
-          :key="toast.id"
-          :class="['toast', `toast--${toast.type}`]"
-          @click="remove(toast.id)"
+          v-for="t in toasts"
+          :key="t.id"
+          :class="['t', `t--${t.type}`]"
+          role="alert"
         >
-          <div class="toast__icon">
-            <span v-if="toast.type === 'success'">✅</span>
-            <span v-else-if="toast.type === 'error'">❌</span>
-            <span v-else-if="toast.type === 'warning'">⚠️</span>
-            <span v-else-if="toast.type === 'info'">ℹ️</span>
-            <span v-else>📝</span>
+          <span class="t-icon" v-html="icons[t.type] || icons.info" aria-hidden="true"></span>
+          <p class="t-msg">{{ t.message }}</p>
+          <button class="t-close" @click="remove(t.id)" :aria-label="`Dismiss ${t.type || 'toast'}`">×</button>
+          <div v-if="t.duration" class="t-bar" aria-hidden="true">
+            <div class="t-bar-fill" :style="{ animationDuration: `${t.duration}ms` }"></div>
           </div>
-          <div class="toast__content">
-            <p class="toast__message">{{ toast.message }}</p>
-          </div>
-          <button class="toast__close" @click.stop="remove(toast.id)">
-            ×
-          </button>
         </div>
       </transition-group>
     </div>
@@ -29,134 +22,68 @@
 
 <script setup>
 import { useToast } from '../composables/useToast.js'
-
 const { toasts, remove } = useToast()
+
+// Minimal inline SVG (no extra components)
+const icons = {
+  success: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="10" cy="10" r="9"/><path d="M6 10.5 9 13l5-6"/></svg>',
+  error: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="10" cy="10" r="9"/><path d="M7 7l6 6M13 7l-6 6"/></svg>',
+  warning: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="m10 3 8 14H2Z"/><path d="M10 8v4"/><path d="M10 14h.01"/></svg>',
+  info: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="10" cy="10" r="9"/><path d="M10 9v5"/><path d="M10 6h.01"/></svg>'
+}
 </script>
 
 <style scoped>
-.toast-container {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 9999;
-  pointer-events: none;
-}
+/* Container */
+.t-container { position: fixed; top: var(--space-5); right: var(--space-5); z-index: var(--z-index-toast); pointer-events:none; width: min(380px, calc(100vw - 2rem)); }
+.t-list { display:flex; flex-direction:column; gap: var(--space-3); }
 
-.toast {
-  display: flex;
-  align-items: flex-start;
-  min-width: 300px;
-  max-width: 500px;
-  margin-bottom: 12px;
-  padding: 16px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  pointer-events: all;
-  transition: all 0.3s ease;
-  border-left: 4px solid;
-}
+/* Base Toast */
+.t { --t-accent: var(--color-info-500); pointer-events:all; display:flex; align-items:flex-start; gap: var(--space-3); background: var(--color-surface-elevated); border:1px solid var(--color-border-primary); padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); box-shadow: var(--card-shadow); position:relative; font-size: var(--font-size-sm); line-height:1.4; }
+.t:before { content:""; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 0 0 3px var(--t-accent); opacity:0.08; pointer-events:none; }
+.t:hover { box-shadow: var(--shadow-md); }
 
-.toast:hover {
-  transform: translateX(-4px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
-}
+/* Icon */
+.t-icon { line-height:0; display:flex; align-items:center; justify-content:center; color: var(--t-accent); margin-top:2px; }
 
-.toast--success {
-  border-left-color: #10b981;
-  background: #f0fdfa;
-}
+/* Message */
+.t-msg { margin:0; flex:1; color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
 
-.toast--error {
-  border-left-color: #ef4444;
-  background: #fef2f2;
-}
+/* Close */
+.t-close { background:transparent; border:none; cursor:pointer; color: var(--color-text-tertiary); font-size: 16px; line-height:1; padding:0 var(--space-1); border-radius: var(--radius-sm); transition: var(--transition-colors); }
+.t-close:hover { color: var(--color-text-primary); background: var(--color-surface-secondary); }
+.t-close:focus { outline:2px solid var(--t-accent); outline-offset:2px; }
 
-.toast--warning {
-  border-left-color: #f59e0b;
-  background: #fffbeb;
-}
+/* Progress bar (accent underline) */
+.t-bar { position:absolute; left:0; bottom:0; height:3px; width:100%; background: var(--color-surface-tertiary); overflow:hidden; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.t-bar-fill { height:100%; width:100%; transform:translateX(-100%); animation: tProgress linear forwards; background: var(--t-accent); }
+@keyframes tProgress { to { transform:translateX(0); } }
 
-.toast--info {
-  border-left-color: #3b82f6;
-  background: #eff6ff;
-}
+/* Variants */
+.t--success { --t-accent: var(--color-success-500); }
+.t--error { --t-accent: var(--color-error-500); }
+.t--warning { --t-accent: var(--color-warning-500); }
+.t--info { --t-accent: var(--color-info-500); }
 
-.toast__icon {
-  flex-shrink: 0;
-  margin-right: 12px;
-  font-size: 18px;
-}
+/* Light subtle tint on variants */
+.t--success { background: linear-gradient(0deg, var(--color-success-50), var(--color-success-50)) border-box; }
+.t--error { background: linear-gradient(0deg, var(--color-error-50), var(--color-error-50)) border-box; }
+.t--warning { background: linear-gradient(0deg, var(--color-warning-50), var(--color-warning-50)) border-box; }
+.t--info { background: linear-gradient(0deg, var(--color-info-50), var(--color-info-50)) border-box; }
 
-.toast__content {
-  flex: 1;
-  min-width: 0;
-}
+/* Dark theme: remove tints, keep accent */
+:root.dark .t--success,
+:root.dark .t--error,
+:root.dark .t--warning,
+:root.dark .t--info { background: var(--color-surface-secondary); }
 
-.toast__message {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.4;
-  color: #374151;
-  word-wrap: break-word;
-}
+/* Animation */
+.t-fade-enter-active, .t-fade-leave-active { transition: opacity var(--transition-fast), transform var(--transition-fast); }
+.t-fade-enter-from, .t-fade-leave-to { opacity:0; transform: translateY(-6px); }
 
-.toast__close {
-  flex-shrink: 0;
-  margin-left: 12px;
-  background: none;
-  border: none;
-  font-size: 18px;
-  font-weight: bold;
-  color: #6b7280;
-  cursor: pointer;
-  padding: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
+/* Mobile */
+@media (max-width: 560px) { .t-container { top: var(--space-4); right: var(--space-4); left: var(--space-4); width:auto; } }
 
-.toast__close:hover {
-  background: rgba(0, 0, 0, 0.1);
-  color: #374151;
-}
-
-/* Toast transitions */
-.toast-enter-active,
-.toast-leave-active {
-  transition: all 0.3s ease;
-}
-
-.toast-enter-from {
-  opacity: 0;
-  transform: translateX(100%);
-}
-
-.toast-leave-to {
-  opacity: 0;
-  transform: translateX(100%);
-}
-
-.toast-move {
-  transition: transform 0.3s ease;
-}
-
-/* Responsive design */
-@media (max-width: 640px) {
-  .toast-container {
-    top: 10px;
-    right: 10px;
-    left: 10px;
-  }
-
-  .toast {
-    min-width: auto;
-    max-width: none;
-  }
-}
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) { .t-fade-enter-active, .t-fade-leave-active, .t-bar-fill { transition:none; animation:none; } .t-fade-enter-from, .t-fade-leave-to { transform:none; } }
 </style>

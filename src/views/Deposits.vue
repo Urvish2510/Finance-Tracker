@@ -3,7 +3,7 @@
     <!-- Header -->
     <div class="header-section">
       <h1 class="page-title">💰 Income & Deposits</h1>
-      <button class="btn btn-primary add-btn" @click="showAddForm">
+      <button class="btn btn-primary" @click="showAddForm">
         <span class="btn-icon">+</span>
         Add Deposit
       </button>
@@ -15,102 +15,35 @@
         <div class="card-icon">📈</div>
         <div class="card-content">
           <h3>Total Income</h3>
-          <p class="amount">{{ formatCurrency(totalIncome) }}</p>
+          <div class="card-value income">{{ formatCurrency(totalIncome) }}</div>
         </div>
       </div>
       <div class="summary-card">
         <div class="card-icon">📊</div>
         <div class="card-content">
           <h3>This Month</h3>
-          <p class="amount">{{ formatCurrency(monthlyIncome) }}</p>
+          <div class="card-value income">{{ formatCurrency(monthlyIncome) }}</div>
         </div>
       </div>
       <div class="summary-card">
         <div class="card-icon">💵</div>
         <div class="card-content">
           <h3>Average</h3>
-          <p class="amount">{{ formatCurrency(averageIncome) }}</p>
+          <div class="card-value income">{{ formatCurrency(averageIncome) }}</div>
         </div>
       </div>
     </div>
 
     <!-- Add/Edit Form -->
     <div v-if="showForm" class="form-overlay">
-      <div class="form-container">
-        <div class="form-header">
-          <h3>{{ editingDeposit ? 'Edit' : 'Add' }} Deposit</h3>
-          <button class="close-btn" @click="hideForm">×</button>
-        </div>
-        <form @submit.prevent="saveDeposit" class="deposit-form">
-          <div class="form-group">
-            <label for="title">Title *</label>
-            <input
-              id="title"
-              v-model="form.title"
-              type="text"
-              placeholder="e.g., Monthly Salary, Freelance Payment"
-              required
-            />
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label for="amount">Amount *</label>
-              <input
-                id="amount"
-                v-model="form.amount"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="category">Category *</label>
-              <select id="category" v-model="form.categoryId" required>
-                <option value="">Select category</option>
-                <option
-                  v-for="category in incomeCategories"
-                  :key="category._id"
-                  :value="category._id"
-                >
-                  {{ category.icon }} {{ category.name }}
-                </option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label for="date">Date *</label>
-            <input
-              id="date"
-              v-model="form.date"
-              type="date"
-              required
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="description">Description</label>
-            <textarea
-              id="description"
-              v-model="form.description"
-              placeholder="Optional description"
-              rows="3"
-            ></textarea>
-          </div>
-
-          <div class="form-actions">
-            <button type="button" class="btn btn-secondary" @click="hideForm">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="saving">
-              {{ saving ? 'Saving...' : (editingDeposit ? 'Update' : 'Add') }} Deposit
-            </button>
-          </div>
-        </form>
-      </div>
+      <DepositForm
+        v-model="form"
+        :categories="incomeCategories"
+        :saving="saving"
+        :editing="!!editingDeposit"
+        @cancel="hideForm"
+        @submit="saveDeposit"
+      />
     </div>
 
     <!-- Deposits List -->
@@ -178,6 +111,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useGlobalStore } from '../composables/useGlobalStore.js';
 import { useCurrency } from '../composables/useCurrency.js';
 import { useToast } from '../composables/useToast.js';
+import DepositForm from '../components/DepositForm.vue';
 
 // Use global store
 const { 
@@ -364,85 +298,90 @@ onMounted(async () => {
 
 <style scoped>
 .deposits-view {
-  padding: 2rem;
-  max-width: 1200px;
+  max-width: var(--container-max-width);
   margin: 0 auto;
+  padding: var(--space-5);
+  gap: var(--space-8);
+  display: flex;
+  flex-direction: column;
 }
 
 .header-section {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-8);
 }
 
 .page-title {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #2d3748;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
   margin: 0;
 }
 
-.add-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #28a745, #20c997);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.add-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
-}
-
 .btn-icon {
-  font-size: 1.2rem;
-  font-weight: bold;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  padding: 0 0.5rem 0 0;
 }
 
 /* Summary Cards */
 .summary-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
+  gap: var(--space-5);
+  margin-bottom: var(--space-8);
 }
 
 .summary-card {
-  background: linear-gradient(135deg, #28a745, #20c997);
-  color: white;
-  padding: 1.5rem;
-  border-radius: 12px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+  box-shadow: var(--card-shadow);
   display: flex;
   align-items: center;
-  gap: 1rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  gap: var(--space-4);
+  transition: var(--transition-all);
+}
+
+.summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .card-icon {
-  font-size: 2.5rem;
-  opacity: 0.9;
+  font-size: var(--font-size-4xl);
+  width: var(--size-2xl);
+  height: var(--size-2xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-secondary);
+  border-radius: var(--radius-xl);
+  flex-shrink: 0;
 }
 
 .card-content h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.9rem;
+  margin: 0 0 var(--space-2) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  opacity: 0.9;
 }
 
-.card-content .amount {
+.card-value {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
   margin: 0;
-  font-size: 1.8rem;
-  font-weight: 700;
+  line-height: var(--line-height-tight);
+}
+
+.card-value.income {
+  color: var(--color-success-600);
 }
 
 /* Form Styles */
@@ -452,65 +391,72 @@ onMounted(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-overlay);
+  backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-index-modal);
 }
 
 .form-container {
-  background: white;
-  padding: 2rem;
-  border-radius: 12px;
+  background: var(--color-surface-elevated);
+  padding: var(--space-8);
+  border-radius: var(--card-radius);
   width: 90%;
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
+  box-shadow: var(--shadow-xl), 0 0 0 1px var(--color-border-focus);
+  border: 1px solid var(--color-border-primary);
 }
 
 .form-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: var(--space-6);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border-primary);
 }
 
 .form-header h3 {
   margin: 0;
-  color: #2d3748;
+  color: var(--color-primary);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
 }
 
 .close-btn {
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: var(--font-size-xl);
   cursor: pointer;
-  color: #718096;
-  width: 30px;
-  height: 30px;
+  color: var(--color-text-secondary);
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
+  transition: var(--transition-colors);
 }
 
 .close-btn:hover {
-  background: #f7fafc;
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
 }
 
 .deposit-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .form-group {
@@ -519,146 +465,140 @@ onMounted(async () => {
 }
 
 .form-group label {
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #4a5568;
+  margin-bottom: var(--space-2);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
 }
 
 .form-group input,
 .form-group select,
 .form-group textarea {
-  padding: 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 1rem;
-  transition: border-color 0.3s ease;
+  padding: var(--input-padding-y) var(--input-padding-x);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-base);
+  background: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  transition: var(--transition-colors);
+  height: var(--input-height-base);
+}
+
+.form-group textarea {
+  height: auto;
+  resize: vertical;
+  min-height: 80px;
 }
 
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: #28a745;
-  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1);
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+  color: var(--color-text-placeholder);
 }
 
 .form-actions {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-4);
   justify-content: flex-end;
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-primary);
 }
 
-.btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-.btn-primary {
-  background: #28a745;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: #218838;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: #6c757d;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background: #5a6268;
-}
+/* Remove duplicate btn definitions since we now use consistent button classes */
 
 /* Deposits Section */
 .deposits-section {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--color-surface-elevated);
+  border-radius: var(--card-radius);
+  padding: var(--space-6);
+  box-shadow: var(--card-shadow);
+  border: 1px solid var(--color-border-primary);
 }
 
 .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--space-6);
 }
 
 .section-header h2 {
   margin: 0;
-  color: #2d3748;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
 }
 
 .filters select {
-  padding: 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: white;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
 }
 
 .loading {
   text-align: center;
-  padding: 2rem;
-  color: #718096;
+  padding: var(--space-8);
+  color: var(--color-text-secondary);
 }
 
 .no-data {
   text-align: center;
-  padding: 3rem 1rem;
+  padding: var(--space-12) var(--space-4);
 }
 
 .no-data-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
+  font-size: var(--font-size-4xl);
+  margin-bottom: var(--space-4);
+  opacity: 0.5;
 }
 
 .no-data h3 {
-  margin: 0 0 0.5rem 0;
-  color: #4a5568;
+  margin: 0 0 var(--space-2) 0;
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-semibold);
 }
 
 .no-data p {
   margin: 0;
-  color: #718096;
+  color: var(--color-text-secondary);
 }
 
 .deposits-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .deposit-item {
   display: flex;
   align-items: center;
-  padding: 1rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  transition: all 0.3s ease;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-primary);
+  transition: var(--transition-all);
 }
 
 .deposit-item:hover {
-  border-color: #28a745;
-  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.1);
+  border-color: var(--color-success);
+  box-shadow: 0 2px 8px var(--color-success-shadow);
+  transform: translateY(-1px);
 }
 
 .deposit-icon {
-  font-size: 2rem;
-  margin-right: 1rem;
+  font-size: var(--font-size-2xl);
+  margin-right: var(--space-4);
 }
 
 .deposit-details {
@@ -666,78 +606,89 @@ onMounted(async () => {
 }
 
 .deposit-title {
-  margin: 0 0 0.25rem 0;
-  font-weight: 600;
-  color: #2d3748;
+  margin: 0 0 var(--space-1) 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
 }
 
 .deposit-description {
-  margin: 0 0 0.5rem 0;
-  color: #718096;
-  font-size: 0.9rem;
+  margin: 0 0 var(--space-2) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
 .deposit-meta {
   display: flex;
-  gap: 1rem;
-  font-size: 0.8rem;
+  gap: var(--space-4);
+  font-size: var(--font-size-xs);
 }
 
 .category {
-  color: #28a745;
-  font-weight: 500;
+  color: var(--color-success);
+  font-weight: var(--font-weight-medium);
 }
 
 .date {
-  color: #718096;
+  color: var(--color-text-secondary);
 }
 
 .deposit-amount {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .deposit-amount .amount {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #28a745;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-success);
 }
 
 .deposit-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .action-btn {
-  background: none;
-  border: 1px solid #e2e8f0;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
+  background: var(--color-surface-primary);
+  border: 1px solid var(--color-border-primary);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: var(--transition-all);
+  font-size: var(--font-size-sm);
 }
 
 .edit-btn:hover {
-  border-color: #3182ce;
-  background: #ebf8ff;
+  border-color: var(--color-primary);
+  background: var(--color-primary-50);
 }
 
 .delete-btn:hover {
-  border-color: #e53e3e;
-  background: #fed7d7;
+  border-color: var(--color-danger);
+  background: var(--color-danger-50);
 }
 
+/* Responsive Design */
 @media (max-width: 768px) {
   .deposits-view {
-    padding: 1rem;
+    padding: var(--space-4);
   }
   
   .header-section {
     flex-direction: column;
-    gap: 1rem;
+    gap: var(--space-4);
     align-items: stretch;
+  }
+  
+  .page-title {
+    font-size: var(--font-size-2xl);
+  }
+  
+  .section-header h2 {
+    font-size: var(--font-size-xl);
   }
   
   .form-row {
@@ -750,14 +701,14 @@ onMounted(async () => {
   
   .section-header {
     flex-direction: column;
-    gap: 1rem;
+    gap: var(--space-4);
     align-items: stretch;
   }
   
   .deposit-item {
     flex-direction: column;
     align-items: flex-start;
-    gap: 1rem;
+    gap: var(--space-4);
   }
   
   .deposit-amount {
@@ -765,6 +716,28 @@ onMounted(async () => {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
+  }
+  
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .deposits-view {
+    padding: var(--space-3);
+  }
+  
+  .deposits-section {
+    padding: var(--space-4);
+  }
+  
+  .page-title {
+    font-size: var(--font-size-xl);
+  }
+  
+  .section-header h2 {
+    font-size: var(--font-size-lg);
   }
 }
 </style>
