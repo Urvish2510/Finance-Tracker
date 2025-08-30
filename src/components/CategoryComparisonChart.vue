@@ -3,13 +3,6 @@
     <div class="chart-header">
       <h3 class="chart-title">🏷️ Category Comparison</h3>
       <div class="chart-controls">
-        <select v-model="selectedPeriod" class="period-select">
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="quarter">This Quarter</option>
-          <option value="year">This Year</option>
-          <option value="all">All Time</option>
-        </select>
         <select v-model="sortBy" class="sort-select">
           <option value="amount">💰 By Amount</option>
           <option value="count">📊 By Count</option>
@@ -71,6 +64,18 @@ import { useCurrency } from '../composables/useCurrency.js'
 import { useTheme } from '../composables/useTheme.js'
 import Chart from 'chart.js/auto'
 
+// Props
+const props = defineProps({
+  dateRange: {
+    type: Object,
+    required: true,
+    default: () => ({
+      startDate: new Date(0).toISOString().split('T')[0],
+      endDate: new Date().toISOString().split('T')[0]
+    })
+  }
+})
+
 // Composables
 const { expenses, categories, loadExpenses, loadCategories } = useGlobalStore()
 const { formatCurrency } = useCurrency()
@@ -81,7 +86,6 @@ const chartCanvas = ref(null)
 const chartContainer = ref(null)
 
 // Reactive state
-const selectedPeriod = ref('month')
 const sortBy = ref('amount')
 const loading = ref(false)
 let chartInstance = null
@@ -96,43 +100,26 @@ const colorPalette = [
 
 // Computed properties
 const periodText = computed(() => {
-  switch (selectedPeriod.value) {
-    case 'week': return 'This Week'
-    case 'month': return 'This Month'
-    case 'quarter': return 'This Quarter'
-    case 'year': return 'This Year'
-    case 'all': return 'All Time'
-    default: return 'Selected Period'
-  }
+  if (!props.dateRange) return 'No period selected'
+  
+  const startDate = new Date(props.dateRange.startDate)
+  const endDate = new Date(props.dateRange.endDate)
+  
+  return `${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`
 })
 
 const filteredExpenses = computed(() => {
-  if (!expenses.value.length) return []
+  if (!expenses.value.length || !props.dateRange) return []
 
-  const now = new Date()
-  let startDate
-
-   // Use rolling windows for consistency
-   switch (selectedPeriod.value) {
-     case 'week': // last 7 days
-       startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-       break
-     case 'month': // last 30 days
-       startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-       break
-     case 'quarter': // last 90 days
-       startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-       break
-     case 'year': // last 365 days
-       startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
-       break
-     default:
-       startDate = new Date(0) // All time
-   }
+  const startDate = new Date(props.dateRange.startDate)
+  const endDate = new Date(props.dateRange.endDate)
+  
+  // Set end date to end of day for proper filtering
+  endDate.setHours(23, 59, 59, 999)
 
   return expenses.value.filter(expense => {
     const expenseDate = new Date(expense.date)
-    return expenseDate >= startDate && expenseDate <= now
+    return expenseDate >= startDate && expenseDate <= endDate
   })
 })
 
@@ -193,7 +180,7 @@ const categoryData = computed(() => {
   })
 
    if (import.meta?.env?.DEV) {
-     console.debug('[CategoryComparisonChart] categories:', categoriesArray.length, 'period:', selectedPeriod.value, 'sortBy:', sortBy.value)
+     console.debug('[CategoryComparisonChart] categories:', categoriesArray.length, 'dateRange:', props.dateRange, 'sortBy:', sortBy.value)
    }
   // Calculate percentages
   const maxValue = Math.max(...categoriesArray.map(cat => {
@@ -363,11 +350,11 @@ watch([categoryData, sortBy, () => chartCanvas.value], () => {
   }
 }, { deep: true })
 
-watch(selectedPeriod, () => {
+watch(() => props.dateRange, () => {
   if (hasData.value) {
     createChart()
   }
-})
+}, { deep: true })
 
 // Lifecycle hooks
 onMounted(async () => {

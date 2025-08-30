@@ -2,15 +2,6 @@
   <div class="pie-chart-wrapper">
     <div class="chart-header">
       <h3 class="chart-title">💳 Spending by Category</h3>
-      <div class="chart-controls">
-        <select v-model="selectedPeriod" class="period-select">
-          <option value="week">This Week</option>
-          <option value="month">This Month</option>
-          <option value="quarter">This Quarter</option>
-          <option value="year">This Year</option>
-          <option value="all">All Time</option>
-        </select>
-      </div>
     </div>
     
     <div class="pie-chart-container" ref="chartContainer">
@@ -45,6 +36,18 @@ import { useCurrency } from '../composables/useCurrency.js'
 import { useTheme } from '../composables/useTheme.js'
 import Chart from 'chart.js/auto'
 
+// Props
+const props = defineProps({
+  dateRange: {
+    type: Object,
+    required: true,
+    default: () => ({
+      startDate: new Date(0).toISOString().split('T')[0],
+      endDate: new Date().toISOString().split('T')[0]
+    })
+  }
+})
+
 // Composables
 const { expenses, categories, loadExpenses, loadCategories } = useGlobalStore()
 const { formatCurrency } = useCurrency()
@@ -55,7 +58,6 @@ const chartCanvas = ref(null)
 const chartContainer = ref(null)
 
 // Reactive state
-const selectedPeriod = ref('month')
 const loading = ref(false)
 let chartInstance = null
 let creating = false
@@ -69,32 +71,17 @@ const colorPalette = [
 
 // Computed properties
 const filteredExpenses = computed(() => {
-  if (!expenses.value.length) return []
+  if (!expenses.value.length || !props.dateRange) return []
 
-  const now = new Date()
-  let startDate
-
-  // Use rolling windows for consistency with other analytics components
-  switch (selectedPeriod.value) {
-    case 'week': // last 7 days
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-      break
-    case 'month': // last 30 days
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      break
-    case 'quarter': // last 90 days
-      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-      break
-    case 'year': // last 365 days
-      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
-      break
-    default:
-      startDate = new Date(0) // All time
-  }
+  const startDate = new Date(props.dateRange.startDate)
+  const endDate = new Date(props.dateRange.endDate)
+  
+  // Set end date to end of day for proper filtering
+  endDate.setHours(23, 59, 59, 999)
 
   return expenses.value.filter(expense => {
     const expenseDate = new Date(expense.date)
-    return expenseDate >= startDate && expenseDate <= now
+    return expenseDate >= startDate && expenseDate <= endDate
   })
 })
 
@@ -138,7 +125,7 @@ const chartData = computed(() => {
   const sortedCategories = Object.values(categoryTotals).sort((a, b) => b.total - a.total)
   // Debug log (dev only)
   if (import.meta?.env?.DEV) {
-    console.debug('[ExpensePieChart] categories:', sortedCategories.length, 'period:', selectedPeriod.value)
+    console.debug('[ExpensePieChart] categories:', sortedCategories.length, 'dateRange:', props.dateRange)
   }
   const totalAmount = sortedCategories.reduce((sum, cat) => sum + cat.total, 0)
 
@@ -240,11 +227,11 @@ watch([chartData, () => chartCanvas.value], () => {
   }
 }, { deep: true })
 
-watch(selectedPeriod, () => {
+watch(() => props.dateRange, () => {
   if (hasData.value) {
     createChart()
   }
-})
+}, { deep: true })
 
 // Lifecycle hooks
 onMounted(async () => {

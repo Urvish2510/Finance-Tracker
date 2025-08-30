@@ -266,7 +266,6 @@ const seedDatabase = async () => {
     console.log(`   Deposits: ${deposits.length} (Total: ₹${totalDepositAmount.toLocaleString('en-IN', {minimumFractionDigits: 2})})`);
     console.log(`   Net Income: ₹${(totalDepositAmount - totalExpenseAmount).toLocaleString('en-IN', {minimumFractionDigits: 2})}`);
     
-    
   } catch (error) {
     console.error('❌ Error seeding database:', error);
   } finally {

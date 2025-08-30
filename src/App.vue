@@ -33,6 +33,7 @@
             :to="item.path"
             class="nav-item"
             :class="{ active: route?.path === item.path }"
+            @click="handleNavClick"
           >
             <span class="nav-icon">{{ item.icon }}</span>
             <span class="nav-text" v-if="!sidebarCollapsed">{{
@@ -237,6 +238,13 @@ const toggleSidebar = () => {
   // Save sidebar state to localStorage for desktop
   if (!isMobile.value) {
     localStorage.setItem('sidebarCollapsed', JSON.stringify(sidebarCollapsed.value));
+  }
+};
+
+const handleNavClick = () => {
+  // Close sidebar on mobile when navigation item is clicked
+  if (isMobile.value) {
+    sidebarCollapsed.value = true;
   }
 };
 

@@ -39,13 +39,37 @@
       <!-- Categories Grid -->
       <div v-else class="categories-grid">
         <CategoryCard 
-          v-for="category in filteredCategories" 
+          v-for="category in paginatedCategories" 
           :key="category._id" 
           :category="category"
           :stats="getCategoryStats(category._id)"
           @edit="handleEditCategory"
           @delete="handleDeleteCategory"
         />
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="pagination">
+        <button 
+          @click="currentPage = Math.max(1, currentPage - 1)"
+          :disabled="currentPage === 1"
+          class="page-btn"
+        >
+          ← Previous
+        </button>
+        
+        <span class="page-info">
+          Page {{ currentPage }} of {{ totalPages }} 
+          ({{ filteredCategories.length }} categories)
+        </span>
+        
+        <button 
+          @click="currentPage = Math.min(totalPages, currentPage + 1)"
+          :disabled="currentPage === totalPages"
+          class="page-btn"
+        >
+          Next →
+        </button>
       </div>
     </div>
 
@@ -89,6 +113,10 @@ const {
 const searchQuery = ref('')
 const editingCategory = ref(null)
 
+// Pagination
+const currentPage = ref(1)
+const itemsPerPage = 10
+
 const newCategory = reactive({
   name: '',
   icon: '📦',
@@ -104,6 +132,16 @@ const filteredCategories = computed(() => {
   return categories.value.filter(category => 
     category.name.toLowerCase().includes(query)
   )
+})
+
+const totalPages = computed(() => {
+  return Math.ceil(filteredCategories.value.length / itemsPerPage)
+})
+
+const paginatedCategories = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  const end = start + itemsPerPage
+  return filteredCategories.value.slice(start, end)
 })
 
 // Methods
@@ -334,5 +372,56 @@ onMounted(async () => {
     padding: var(--space-2) var(--space-4);
     font-size: var(--font-size-xs);
   }
+}
+
+/* Pagination Styles */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border-primary);
+  margin-top: var(--space-5);
+}
+
+.page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--button-padding-x-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: var(--transition-all);
+  user-select: none;
+  text-decoration: none;
+  white-space: nowrap;
+  height: var(--button-height-sm);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+}
+
+.page-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-700);
+  border-color: var(--color-primary-700);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.page-btn:disabled {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-primary);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
 }
 </style>
