@@ -5,7 +5,7 @@ import UserSettings from '../models/UserSettings.js';
 export const getAllExpenses = async (req, res) => {
   try {
     const expenses = await Expense.find()
-      .populate('category', 'name icon color')
+      .populate('category', 'name icon color type createdAt updatedAt')
       .sort({ date: -1, createdAt: -1 });
     res.json(expenses);
   } catch (error) {
@@ -17,7 +17,7 @@ export const getAllExpenses = async (req, res) => {
 export const getExpenseById = async (req, res) => {
   try {
     const expense = await Expense.findById(req.params.id)
-      .populate('category', 'name icon color');
+      .populate('category', 'name icon color type createdAt updatedAt');
     
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
@@ -33,7 +33,7 @@ export const getExpenseById = async (req, res) => {
 export const getExpensesByCategory = async (req, res) => {
   try {
     const expenses = await Expense.find({ category: req.params.categoryId })
-      .populate('category', 'name icon color')
+      .populate('category', 'name icon color type createdAt updatedAt')
       .sort({ date: -1 });
     res.json(expenses);
   } catch (error) {
@@ -50,13 +50,13 @@ export const getExpensesByDateRange = async (req, res) => {
       return res.status(400).json({ error: 'Start date and end date are required' });
     }
     
-    const expenses = await Expense.find({
+  const expenses = await Expense.find({
       date: {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
       }
     })
-    .populate('category', 'name icon color')
+  .populate('category', 'name icon color type createdAt updatedAt')
     .sort({ date: -1 });
     
     res.json(expenses);
@@ -68,11 +68,13 @@ export const getExpensesByDateRange = async (req, res) => {
 
 export const createExpense = async (req, res) => {
   try {
-    const { title, amount, category, date, description, currency } = req.body;
+  const { title, amount, category, categoryId, date, description, currency } = req.body;
+  const effectiveCategory = category || categoryId; // allow alias
+  const effectiveTitle = (title || description || 'Expense').trim();
     
     // Validate required fields
-    if (!title || !amount || !category) {
-      return res.status(400).json({ error: 'Title, amount, and category are required' });
+    if (!amount || !effectiveCategory) {
+      return res.status(400).json({ error: 'Amount and category are required' });
     }
     
     // Validate amount
@@ -81,7 +83,7 @@ export const createExpense = async (req, res) => {
     }
     
     // Validate category exists
-    const categoryExists = await Category.findById(category);
+  const categoryExists = await Category.findById(effectiveCategory);
     if (!categoryExists) {
       return res.status(400).json({ error: 'Invalid category' });
     }
@@ -90,16 +92,16 @@ export const createExpense = async (req, res) => {
     const settings = await UserSettings.getOrCreateDefault();
     
     const expense = new Expense({
-      title: title.trim(),
+      title: effectiveTitle,
       amount: parseFloat(amount),
-      category,
+  category: effectiveCategory,
       date: date || new Date(),
       description: description?.trim() || '',
       currency: currency || settings.currency
     });
     
     const savedExpense = await expense.save();
-    await savedExpense.populate('category', 'name icon color');
+  await savedExpense.populate('category', 'name icon color type createdAt updatedAt');
     
     res.status(201).json(savedExpense);
   } catch (error) {
@@ -110,45 +112,32 @@ export const createExpense = async (req, res) => {
 
 export const updateExpense = async (req, res) => {
   try {
-    const { title, amount, category, date, description, currency } = req.body;
-    
-    // Validate required fields
-    if (!title || !amount || !category) {
-      return res.status(400).json({ error: 'Title, amount, and category are required' });
-    }
-    
-    // Validate amount
-    if (isNaN(amount) || parseFloat(amount) <= 0) {
-      return res.status(400).json({ error: 'Amount must be a positive number' });
-    }
-    
-    // Validate category exists
-    const categoryExists = await Category.findById(category);
-    if (!categoryExists) {
-      return res.status(400).json({ error: 'Invalid category' });
-    }
-    
-    // Get user settings for default currency
-    const settings = await UserSettings.getOrCreateDefault();
-    
-    const expense = await Expense.findByIdAndUpdate(
-      req.params.id,
-      {
-        title: title.trim(),
-        amount: parseFloat(amount),
-        category,
-        date,
-        description: description?.trim() || '',
-        currency: currency || settings.currency
-      },
-      { new: true, runValidators: true }
-    ).populate('category', 'name icon color');
-    
-    if (!expense) {
-      return res.status(404).json({ error: 'Expense not found' });
-    }
-    
-    res.json(expense);
+  const { title, amount, category, categoryId, date, description, currency } = req.body;
+  const existing = await Expense.findById(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Expense not found' });
+  const effectiveTitle = title || existing.title;
+  const effectiveCategory = category || categoryId || existing.category?.toString();
+  const effectiveAmount = amount !== undefined ? amount : existing.amount;
+  if (!effectiveTitle || !effectiveCategory) {
+    return res.status(400).json({ error: 'Title and category are required' });
+  }
+  if (isNaN(effectiveAmount) || parseFloat(effectiveAmount) <= 0) {
+    return res.status(400).json({ error: 'Amount must be a positive number' });
+  }
+  if (effectiveCategory && effectiveCategory.toString() !== existing.category?.toString()) {
+    const catExists = await Category.findById(effectiveCategory);
+    if (!catExists) return res.status(400).json({ error: 'Invalid category' });
+  }
+  const settings = await UserSettings.getOrCreateDefault();
+  existing.title = effectiveTitle.trim();
+  existing.amount = parseFloat(effectiveAmount);
+  existing.category = effectiveCategory;
+  if (date) existing.date = date;
+  existing.description = description?.trim() || existing.description || '';
+  existing.currency = currency || existing.currency || settings.currency;
+  await existing.save();
+  await existing.populate('category', 'name icon color type createdAt updatedAt');
+  res.json(existing);
   } catch (error) {
     console.error('Error updating expense:', error);
     res.status(500).json({ error: 'Failed to update expense' });
@@ -172,7 +161,7 @@ export const deleteExpense = async (req, res) => {
 
 export const getExpenseSummary = async (req, res) => {
   try {
-    const expenses = await Expense.find().populate('category', 'name icon color');
+  const expenses = await Expense.find().populate('category', 'name icon color type createdAt updatedAt');
     const categories = await Category.find();
     
     // Calculate total expenses

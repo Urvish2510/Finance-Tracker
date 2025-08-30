@@ -6,8 +6,9 @@ const router = express.Router();
 // Get user settings
 router.get('/', settingsController.getSettings);
 
-// Update user settings
-router.put('/', settingsController.updateSettings);
+// Create or update user settings
+router.post('/', settingsController.createOrUpdateSettings);
+router.put('/', settingsController.createOrUpdateSettings);
 
 // Get currency information
 router.get('/currency', settingsController.getCurrencyInfo);

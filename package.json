@@ -16,13 +16,16 @@
     "seed:dev": "cross-env NODE_ENV=development node server/seedDatabase.js",
     "seed:prod": "cross-env NODE_ENV=production node server/seedDatabase.js",
     "start": "npm run server:prod",
-    "deploy": "npm run build && npm run start",
+    "deploy": "npm run build && npm start",
     "test": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:server": "vitest run --config vitest.config.server.js",
-    "test:client": "vitest run --config vitest.config.client.js"
+    "test:client": "vitest run --config vitest.config.client.js",
+    "test:integration": "vitest run --config vitest.config.integration.js",
+    "test:e2e": "vitest run --config vitest.config.integration.js tests/integration/e2e-workflows.test.js",
+    "test:all": "npm run test:server && npm run test:client && npm run test:integration"
   },
   "dependencies": {
     "chart.js": "^4.5.0",
@@ -32,7 +35,6 @@
     "mongodb": "^6.18.0",
     "mongoose": "^8.17.1",
     "vue": "^3.5.17",
-    "vue-chartjs": "^5.3.2",
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
@@ -45,6 +47,7 @@
     "cross-env": "^10.0.0",
     "happy-dom": "^18.0.1",
     "jsdom": "^26.1.0",
+    "mongodb-memory-server": "^10.2.0",
     "nodemon": "^3.1.10",
     "supertest": "^7.1.4",
     "terser": "^5.43.1",

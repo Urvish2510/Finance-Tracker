@@ -5,7 +5,7 @@ import UserSettings from '../models/UserSettings.js';
 export const getAllDeposits = async (req, res) => {
   try {
     const deposits = await Deposit.find()
-      .populate('category', 'name icon color')
+      .populate('category', 'name icon color type createdAt updatedAt')
       .sort({ date: -1, createdAt: -1 });
     res.json(deposits);
   } catch (error) {
@@ -17,7 +17,7 @@ export const getAllDeposits = async (req, res) => {
 export const getDepositById = async (req, res) => {
   try {
     const deposit = await Deposit.findById(req.params.id)
-      .populate('category', 'name icon color');
+      .populate('category', 'name icon color type createdAt updatedAt');
     
     if (!deposit) {
       return res.status(404).json({ error: 'Deposit not found' });
@@ -33,7 +33,7 @@ export const getDepositById = async (req, res) => {
 export const getDepositsByCategory = async (req, res) => {
   try {
     const deposits = await Deposit.find({ category: req.params.categoryId })
-      .populate('category', 'name icon color')
+      .populate('category', 'name icon color type createdAt updatedAt')
       .sort({ date: -1 });
     res.json(deposits);
   } catch (error) {
@@ -50,13 +50,13 @@ export const getDepositsByDateRange = async (req, res) => {
       return res.status(400).json({ error: 'Start date and end date are required' });
     }
     
-    const deposits = await Deposit.find({
+  const deposits = await Deposit.find({
       date: {
         $gte: new Date(startDate),
         $lte: new Date(endDate)
       }
     })
-    .populate('category', 'name icon color')
+  .populate('category', 'name icon color type createdAt updatedAt')
     .sort({ date: -1 });
     
     res.json(deposits);
@@ -68,11 +68,14 @@ export const getDepositsByDateRange = async (req, res) => {
 
 export const createDeposit = async (req, res) => {
   try {
-    const { title, amount, category, date, description, currency } = req.body;
+  const { title, source, amount, category, categoryId, date, description, currency } = req.body;
+  const effectiveTitle = title || source; // allow legacy 'source'
+  const effectiveCategory = category || categoryId;
+  const finalTitle = (effectiveTitle || description || 'Deposit').trim();
     
-    // Validate required fields
-    if (!title || !amount || !category) {
-      return res.status(400).json({ error: 'Title, amount, and category are required' });
+    // Validate required fields (title can be derived, so only amount & category mandatory)
+    if (!amount || !effectiveCategory) {
+      return res.status(400).json({ error: 'Amount and category are required' });
     }
     
     // Validate amount
@@ -81,7 +84,7 @@ export const createDeposit = async (req, res) => {
     }
     
     // Validate category exists
-    const categoryExists = await Category.findById(category);
+  const categoryExists = await Category.findById(effectiveCategory);
     if (!categoryExists) {
       return res.status(400).json({ error: 'Invalid category' });
     }
@@ -90,16 +93,16 @@ export const createDeposit = async (req, res) => {
     const settings = await UserSettings.getOrCreateDefault();
     
     const deposit = new Deposit({
-      title: title.trim(),
+    title: finalTitle,
       amount: parseFloat(amount),
-      category,
+  category: effectiveCategory,
       date: date || new Date(),
       description: description?.trim() || '',
       currency: currency || settings.currency
     });
     
     const savedDeposit = await deposit.save();
-    await savedDeposit.populate('category', 'name icon color');
+  await savedDeposit.populate('category', 'name icon color type createdAt updatedAt');
     
     res.status(201).json(savedDeposit);
   } catch (error) {
@@ -110,45 +113,35 @@ export const createDeposit = async (req, res) => {
 
 export const updateDeposit = async (req, res) => {
   try {
-    const { title, amount, category, date, description, currency } = req.body;
-    
-    // Validate required fields
-    if (!title || !amount || !category) {
-      return res.status(400).json({ error: 'Title, amount, and category are required' });
-    }
-    
-    // Validate amount
-    if (isNaN(amount) || parseFloat(amount) <= 0) {
-      return res.status(400).json({ error: 'Amount must be a positive number' });
-    }
-    
-    // Validate category exists
-    const categoryExists = await Category.findById(category);
-    if (!categoryExists) {
-      return res.status(400).json({ error: 'Invalid category' });
-    }
-    
-    // Get user settings for default currency
-    const settings = await UserSettings.getOrCreateDefault();
-    
-    const deposit = await Deposit.findByIdAndUpdate(
-      req.params.id,
-      {
-        title: title.trim(),
-        amount: parseFloat(amount),
-        category,
-        date,
-        description: description?.trim() || '',
-        currency: currency || settings.currency
-      },
-      { new: true, runValidators: true }
-    ).populate('category', 'name icon color');
-    
-    if (!deposit) {
-      return res.status(404).json({ error: 'Deposit not found' });
-    }
-    
-    res.json(deposit);
+  const { title, source, amount, category, categoryId, date, description, currency } = req.body;
+  const existing = await Deposit.findById(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Deposit not found' });
+
+  const effectiveTitle = (title || source || existing.title);
+  const effectiveCategory = (category || categoryId || existing.category?.toString());
+  const effectiveAmount = amount !== undefined ? amount : existing.amount;
+
+  if (!effectiveTitle || !effectiveCategory) {
+    return res.status(400).json({ error: 'Title and category are required' });
+  }
+  if (isNaN(effectiveAmount) || parseFloat(effectiveAmount) <= 0) {
+    return res.status(400).json({ error: 'Amount must be a positive number' });
+  }
+  // Validate category if changed
+  if (effectiveCategory && effectiveCategory.toString() !== existing.category?.toString()) {
+    const categoryExists = await Category.findById(effectiveCategory);
+    if (!categoryExists) return res.status(400).json({ error: 'Invalid category' });
+  }
+  const settings = await UserSettings.getOrCreateDefault();
+  existing.title = effectiveTitle.trim();
+  existing.amount = parseFloat(effectiveAmount);
+  existing.category = effectiveCategory;
+  if (date) existing.date = date;
+  existing.description = description?.trim() || existing.description || '';
+  existing.currency = currency || existing.currency || settings.currency;
+  await existing.save();
+  await existing.populate('category', 'name icon color type createdAt updatedAt');
+  res.json(existing);
   } catch (error) {
     console.error('Error updating deposit:', error);
     res.status(500).json({ error: 'Failed to update deposit' });
@@ -172,7 +165,7 @@ export const deleteDeposit = async (req, res) => {
 
 export const getDepositSummary = async (req, res) => {
   try {
-    const deposits = await Deposit.find().populate('category', 'name icon color');
+  const deposits = await Deposit.find().populate('category', 'name icon color type createdAt updatedAt');
     const categories = await Category.find();
     
     // Calculate total deposits

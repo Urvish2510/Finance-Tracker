@@ -6,6 +6,7 @@ import categoryRoutes from './routes/categories.js';
 import expenseRoutes from './routes/expenses.js';
 import depositRoutes from './routes/deposits.js';
 import settingsRoutes from './routes/settings.js';
+import analyticsRoutes from './routes/analytics.js';
 
 // Load environment variables based on NODE_ENV
 const ENV = process.env.NODE_ENV || 'development';
@@ -158,6 +159,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/deposits', depositRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Error handling middleware with environment-specific responses
 app.use((err, req, res, next) => {

@@ -32,8 +32,20 @@ const expenseSchema = new mongoose.Schema({
     enum: ['INR', 'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'SGD', 'CNY', 'KRW']
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  toJSON: { 
+    virtuals: true, 
+    transform: (_doc, ret) => { 
+      if (ret.category) {
+        ret.categoryId = ret.category._id ? ret.category._id.toString() : ret.category;
+      }
+      return ret; 
+    } 
+  },
+  toObject: { virtuals: true }
 });
+
+expenseSchema.virtual('categoryId').get(function() { return this.category; });
 
 // Indexes for faster queries
 expenseSchema.index({ date: -1 });

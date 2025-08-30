@@ -1,236 +1,361 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import request from 'supertest'
-import express from 'express'
-import expenseRoutes from '../../server/routes/expenses.js'
-import { mockExpenses } from '../mocks/mockData.js'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { api, clearTestDb } from './setup.js'
 
-// Mock the Expense model
-vi.mock('../../server/models/Expense.js', () => ({
-  default: {
-    find: vi.fn(),
-    findById: vi.fn(),
-    create: vi.fn(),
-    findByIdAndUpdate: vi.fn(),
-    findByIdAndDelete: vi.fn(),
-    deleteMany: vi.fn(),
-    populate: vi.fn()
-  }
-}))
-
-describe('Expenses API Routes', () => {
-  let app
-  let Expense
-
+describe('Expenses API', () => {
+  let categoryId
+  
   beforeEach(async () => {
-    vi.clearAllMocks()
+    await clearTestDb()
     
-    // Import the mocked Expense model
-    Expense = (await import('../../server/models/Expense.js')).default
-    
-    // Set up Express app with routes
-    app = express()
-    app.use(express.json())
-    app.use('/expenses', expenseRoutes)
+    // Create a test category for expenses
+    const categoryResponse = await api().post('/api/categories').send({
+      name: 'Food',
+      icon: '🍔',
+      color: '#ff8800',
+      type: 'expense'
+    })
+    categoryId = categoryResponse.body._id
   })
 
-  describe('GET /expenses', () => {
-    it('should return all expenses with populated categories', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(mockExpenses) }
-      Expense.find.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .get('/expenses')
-        .expect(200)
-      
-      expect(response.body).toEqual(mockExpenses)
-      expect(Expense.find).toHaveBeenCalledWith({})
-      expect(mockPopulate.populate).toHaveBeenCalledWith('category')
+  describe('POST /api/expenses', () => {
+    it('creates an expense successfully', async () => {
+      const expenseData = {
+        title: 'Lunch at Restaurant',
+        amount: 25.50,
+        category: categoryId,
+        date: new Date().toISOString(),
+        description: 'Team lunch',
+        currency: 'INR'
+      }
+
+      const response = await api()
+        .post('/api/expenses')
+        .send(expenseData)
+
+      expect(response.status).toBe(201)
+      expect(response.body.title).toBe('Lunch at Restaurant')
+      expect(response.body.amount).toBe(25.5)
+      expect(response.body.category).toBeDefined()
+      expect(response.body.category.name).toBe('Food')
     })
 
-    it('should filter expenses by category', async () => {
-      const filteredExpenses = mockExpenses.filter(exp => exp.category_id === '1')
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(filteredExpenses) }
-      Expense.find.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .get('/expenses?category=1')
-        .expect(200)
-      
-      expect(response.body).toEqual(filteredExpenses)
-      expect(Expense.find).toHaveBeenCalledWith({ category: '1' })
+    it('validates required fields', async () => {
+      const response = await api()
+        .post('/api/expenses')
+        .send({ title: 'Test' })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('required')
     })
 
-    it('should filter expenses by date range', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(mockExpenses) }
-      Expense.find.mockReturnValue(mockPopulate)
-      
-      await request(app)
-        .get('/expenses?startDate=2024-08-01&endDate=2024-08-31')
-        .expect(200)
-      
-      expect(Expense.find).toHaveBeenCalledWith({
-        date: {
-          $gte: '2024-08-01',
-          $lte: '2024-08-31'
-        }
+    it('validates positive amount', async () => {
+      const response = await api()
+        .post('/api/expenses')
+        .send({
+          title: 'Test',
+          amount: -10,
+          category: categoryId
+        })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('positive')
+    })
+
+    it('validates category exists', async () => {
+      const response = await api()
+        .post('/api/expenses')
+        .send({
+          title: 'Test',
+          amount: 10,
+          category: '507f1f77bcf86cd799439011'
+        })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('Invalid category')
+    })
+
+    it('uses default currency from settings', async () => {
+      const response = await api()
+        .post('/api/expenses')
+        .send({
+          title: 'Test Expense',
+          amount: 100,
+          category: categoryId
+        })
+
+      expect(response.status).toBe(201)
+      expect(response.body.currency).toBe('INR')
+    })
+  })
+
+  describe('GET /api/expenses', () => {
+    it('returns empty array when no expenses', async () => {
+      const response = await api().get('/api/expenses')
+
+      expect(response.status).toBe(200)
+      expect(response.body).toEqual([])
+    })
+
+    it('returns all expenses with category populated', async () => {
+      await api().post('/api/expenses').send({
+        title: 'Expense 1',
+        amount: 50,
+        category: categoryId
       })
+
+      await api().post('/api/expenses').send({
+        title: 'Expense 2',
+        amount: 75,
+        category: categoryId
+      })
+
+      const response = await api().get('/api/expenses')
+
+      expect(response.status).toBe(200)
+      expect(response.body).toHaveLength(2)
+      expect(response.body[0].category.name).toBe('Food')
+      expect(response.body[1].category.name).toBe('Food')
     })
 
-    it('should handle database errors', async () => {
-      const mockPopulate = { populate: vi.fn().mockRejectedValue(new Error('Database error')) }
-      Expense.find.mockReturnValue(mockPopulate)
-      
-      await request(app)
-        .get('/expenses')
-        .expect(500)
+    it('sorts expenses by date descending', async () => {
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+
+      const today = new Date()
+
+      await api().post('/api/expenses').send({
+        title: 'Yesterday Expense',
+        amount: 50,
+        category: categoryId,
+        date: yesterday.toISOString()
+      })
+
+      await api().post('/api/expenses').send({
+        title: 'Today Expense',
+        amount: 75,
+        category: categoryId,
+        date: today.toISOString()
+      })
+
+      const response = await api().get('/api/expenses')
+
+      expect(response.status).toBe(200)
+      expect(response.body[0].title).toBe('Today Expense')
+      expect(response.body[1].title).toBe('Yesterday Expense')
     })
   })
 
-  describe('GET /expenses/:id', () => {
-    it('should return a specific expense', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(mockExpenses[0]) }
-      Expense.findById.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .get('/expenses/exp1')
-        .expect(200)
-      
-      expect(response.body).toEqual(mockExpenses[0])
-      expect(Expense.findById).toHaveBeenCalledWith('exp1')
+  describe('GET /api/expenses/:id', () => {
+    it('returns expense by ID', async () => {
+      const createResponse = await api().post('/api/expenses').send({
+        title: 'Test Expense',
+        amount: 100,
+        category: categoryId
+      })
+
+      const response = await api().get(`/api/expenses/${createResponse.body._id}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body.title).toBe('Test Expense')
+      expect(response.body.category.name).toBe('Food')
     })
 
-    it('should return 404 for non-existent expense', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(null) }
-      Expense.findById.mockReturnValue(mockPopulate)
-      
-      await request(app)
-        .get('/expenses/999')
-        .expect(404)
+    it('returns 404 for non-existent expense', async () => {
+      const response = await api().get('/api/expenses/507f1f77bcf86cd799439011')
+
+      expect(response.status).toBe(404)
     })
   })
 
-  describe('POST /expenses', () => {
-    it('should create a new expense', async () => {
-      const newExpense = {
-        title: 'Coffee',
+  describe('GET /api/expenses/category/:categoryId', () => {
+    it('returns expenses for specific category', async () => {
+      // Create another category
+      const category2Response = await api().post('/api/categories').send({
+        name: 'Transport',
+        icon: '🚌',
+        color: '#00aaee',
+        type: 'expense'
+      })
+
+      await api().post('/api/expenses').send({
+        title: 'Food Expense',
+        amount: 50,
+        category: categoryId
+      })
+
+      await api().post('/api/expenses').send({
+        title: 'Transport Expense',
+        amount: 25,
+        category: category2Response.body._id
+      })
+
+      const response = await api().get(`/api/expenses/category/${categoryId}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body).toHaveLength(1)
+      expect(response.body[0].title).toBe('Food Expense')
+    })
+  })
+
+  describe('GET /api/expenses/date-range', () => {
+    it('returns expenses within date range', async () => {
+      const today = new Date()
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      const twoDaysAgo = new Date()
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+
+      await api().post('/api/expenses').send({
+        title: 'Old Expense',
+        amount: 100,
+        category: categoryId,
+        date: twoDaysAgo.toISOString()
+      })
+
+      await api().post('/api/expenses').send({
+        title: 'Recent Expense',
+        amount: 50,
+        category: categoryId,
+        date: yesterday.toISOString()
+      })
+
+      const response = await api()
+        .get('/api/expenses/date-range')
+        .query({
+          startDate: yesterday.toISOString().split('T')[0],
+          endDate: today.toISOString().split('T')[0]
+        })
+
+      expect(response.status).toBe(200)
+      expect(response.body).toHaveLength(1)
+      expect(response.body[0].title).toBe('Recent Expense')
+    })
+
+    it('validates required date parameters', async () => {
+      const response = await api().get('/api/expenses/date-range')
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('required')
+    })
+  })
+
+  describe('PUT /api/expenses/:id', () => {
+    it('updates expense successfully', async () => {
+      const createResponse = await api().post('/api/expenses').send({
+        title: 'Original Title',
+        amount: 100,
+        category: categoryId
+      })
+
+      const updateData = {
+        title: 'Updated Title',
         amount: 150,
-        category: '1',
-        date: '2024-08-21',
-        description: 'Morning coffee'
+        category: categoryId,
+        description: 'Updated description',
+        currency: 'USD'
       }
-      
-      const createdExpense = { _id: 'exp3', ...newExpense }
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(createdExpense) }
-      Expense.create.mockResolvedValue({ _id: 'exp3', ...newExpense })
-      Expense.findById.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .post('/expenses')
-        .send(newExpense)
-        .expect(201)
-      
-      expect(response.body).toEqual(createdExpense)
-      expect(Expense.create).toHaveBeenCalledWith(newExpense)
+
+      const response = await api()
+        .put(`/api/expenses/${createResponse.body._id}`)
+        .send(updateData)
+
+      expect(response.status).toBe(200)
+      expect(response.body.title).toBe('Updated Title')
+      expect(response.body.amount).toBe(150)
+      expect(response.body.currency).toBe('USD')
     })
 
-    it('should validate required fields', async () => {
-      const invalidExpense = {
-        // missing required fields
-        description: 'Test'
-      }
-      
-      await request(app)
-        .post('/expenses')
-        .send(invalidExpense)
-        .expect(400)
-    })
+    it('returns 404 for non-existent expense', async () => {
+      const response = await api()
+        .put('/api/expenses/507f1f77bcf86cd799439011')
+        .send({
+          title: 'Test',
+          amount: 100,
+          category: categoryId
+        })
 
-    it('should handle validation errors', async () => {
-      const newExpense = {
-        title: 'Coffee',
-        amount: 150,
-        category: '1',
-        date: '2024-08-21'
-      }
-      
-      Expense.create.mockRejectedValue(new Error('Validation error'))
-      
-      await request(app)
-        .post('/expenses')
-        .send(newExpense)
-        .expect(500)
+      expect(response.status).toBe(404)
     })
   })
 
-  describe('PUT /expenses/:id', () => {
-    it('should update an existing expense', async () => {
-      const updatedExpense = { ...mockExpenses[0], amount: 900 }
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(updatedExpense) }
-      Expense.findByIdAndUpdate.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .put('/expenses/exp1')
-        .send({ amount: 900 })
-        .expect(200)
-      
-      expect(response.body).toEqual(updatedExpense)
-      expect(Expense.findByIdAndUpdate).toHaveBeenCalledWith(
-        'exp1',
-        { amount: 900 },
-        { new: true, runValidators: true }
-      )
+  describe('DELETE /api/expenses/:id', () => {
+    it('deletes expense successfully', async () => {
+      const createResponse = await api().post('/api/expenses').send({
+        title: 'To Delete',
+        amount: 100,
+        category: categoryId
+      })
+
+      const response = await api().delete(`/api/expenses/${createResponse.body._id}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body.message).toContain('deleted successfully')
     })
 
-    it('should return 404 for non-existent expense', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(null) }
-      Expense.findByIdAndUpdate.mockReturnValue(mockPopulate)
-      
-      await request(app)
-        .put('/expenses/999')
-        .send({ amount: 900 })
-        .expect(404)
+    it('returns 404 for non-existent expense', async () => {
+      const response = await api().delete('/api/expenses/507f1f77bcf86cd799439011')
+
+      expect(response.status).toBe(404)
     })
   })
 
-  describe('DELETE /expenses/:id', () => {
-    it('should delete an expense', async () => {
-      Expense.findByIdAndDelete.mockResolvedValue(mockExpenses[0])
-      
-      await request(app)
-        .delete('/expenses/exp1')
-        .expect(200)
-      
-      expect(Expense.findByIdAndDelete).toHaveBeenCalledWith('exp1')
+  describe('GET /api/expenses/summary', () => {
+    it('returns expense summary', async () => {
+      await api().post('/api/expenses').send({
+        title: 'Expense 1',
+        amount: 100,
+        category: categoryId
+      })
+
+      await api().post('/api/expenses').send({
+        title: 'Expense 2',
+        amount: 50,
+        category: categoryId
+      })
+
+      const response = await api().get('/api/expenses/summary')
+
+      expect(response.status).toBe(200)
+      expect(response.body.totalExpenses).toBe(150)
+      expect(response.body.expenseCount).toBe(2)
+      expect(response.body.categoryBreakdown).toBeDefined()
+      expect(response.body.monthlyTotals).toBeDefined()
+      expect(response.body.recentExpenses).toBeDefined()
     })
 
-    it('should return 404 for non-existent expense', async () => {
-      Expense.findByIdAndDelete.mockResolvedValue(null)
-      
-      await request(app)
-        .delete('/expenses/999')
-        .expect(404)
-    })
-  })
+    it('returns correct category breakdown', async () => {
+      // Create another category
+      const category2Response = await api().post('/api/categories').send({
+        name: 'Transport',
+        icon: '🚌',
+        color: '#00aaee',
+        type: 'expense'
+      })
 
-  describe('DELETE /expenses/clear-all', () => {
-    it('should delete all expenses', async () => {
-      Expense.deleteMany.mockResolvedValue({ deletedCount: 5 })
-      
-      const response = await request(app)
-        .delete('/expenses/clear-all')
-        .expect(200)
-      
-      expect(response.body.message).toContain('All expenses deleted')
-      expect(response.body.deletedCount).toBe(5)
-      expect(Expense.deleteMany).toHaveBeenCalledWith({})
-    })
+      await api().post('/api/expenses').send({
+        title: 'Food Expense',
+        amount: 100,
+        category: categoryId
+      })
 
-    it('should handle deletion errors', async () => {
-      Expense.deleteMany.mockRejectedValue(new Error('Deletion failed'))
+      await api().post('/api/expenses').send({
+        title: 'Transport Expense',
+        amount: 25,
+        category: category2Response.body._id
+      })
+
+      const response = await api().get('/api/expenses/summary')
+
+      expect(response.status).toBe(200)
       
-      await request(app)
-        .delete('/expenses/clear-all')
-        .expect(500)
+      const breakdown = response.body.categoryBreakdown
+      const foodCategory = Object.values(breakdown).find(cat => cat.name === 'Food')
+      const transportCategory = Object.values(breakdown).find(cat => cat.name === 'Transport')
+
+      expect(foodCategory.total).toBe(100)
+      expect(foodCategory.count).toBe(1)
+      expect(transportCategory.total).toBe(25)
+      expect(transportCategory.count).toBe(1)
     })
   })
 })
