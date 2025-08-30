@@ -28,16 +28,17 @@ jspm_packages/
 
 # dotenv environment variables file
 .env
-.env.local
-.env.production.local
-.env.test.local
+.env.*
+# .env.local
+# .env.production.local
+# .env.test.local
 
-# Keep template environment files but ignore local ones
-.env.development
-.env.production  
-.env.development.local
-.env.production.local
-.env.test.local
+# # Keep template environment files but ignore local ones
+# .env.development
+# .env.production  
+# .env.development.local
+# .env.production.local
+# .env.test.local
 
 # Runtime data
 pids
