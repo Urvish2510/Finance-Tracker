@@ -12,32 +12,49 @@ export const getSettings = async (req, res) => {
 };
 
 // Update user settings
-export const updateSettings = async (req, res) => {
+export const createOrUpdateSettings = async (req, res) => {
   try {
-    const { currency, currencySymbol, dateFormat, theme, defaultCategory } = req.body;
+    const { currency, currencySymbol, dateFormat, theme, defaultCategory, budgetLimit, notifications, autoBackup } = req.body;
+    // Basic validation of enums if provided
+    const validCurrencies = ['INR', 'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'SGD', 'CNY', 'KRW'];
+    if (currency && !validCurrencies.includes(currency)) {
+      return res.status(400).json({ error: 'Invalid currency' });
+    }
+    const validThemes = ['light', 'dark', 'auto'];
+    if (theme && !validThemes.includes(theme)) {
+      return res.status(400).json({ error: 'Invalid theme' });
+    }
     
     let settings = await UserSettings.findOne({ userId: 'default' });
     
-    if (!settings) {
+  const isNew = !settings;
+  if (isNew) {
       settings = await UserSettings.create({
         userId: 'default',
         currency: currency || 'INR',
         currencySymbol: currencySymbol || '₹',
         dateFormat: dateFormat || 'DD/MM/YYYY',
         theme: theme || 'light',
-        defaultCategory
+        defaultCategory,
+        budgetLimit: budgetLimit ?? 1000,
+        notifications: notifications ?? true,
+        autoBackup: autoBackup ?? false
       });
-    } else {
+  } else {
       settings.currency = currency || settings.currency;
       settings.currencySymbol = currencySymbol || settings.currencySymbol;
       settings.dateFormat = dateFormat || settings.dateFormat;
       settings.theme = theme || settings.theme;
       settings.defaultCategory = defaultCategory || settings.defaultCategory;
+      if (budgetLimit !== undefined) settings.budgetLimit = budgetLimit;
+      if (notifications !== undefined) settings.notifications = notifications;
+      if (autoBackup !== undefined) settings.autoBackup = autoBackup;
       
       await settings.save();
     }
-    
-    res.json(settings);
+  // Status code logic: POST always 201, PUT always 200
+  const status = req.method === 'POST' ? 201 : 200;
+  res.status(status).json(settings);
   } catch (error) {
     console.error('Error updating settings:', error);
     res.status(500).json({ error: 'Failed to update settings' });

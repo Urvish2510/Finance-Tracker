@@ -25,6 +25,19 @@ const userSettingsSchema = new mongoose.Schema({
     default: 'light',
     enum: ['light', 'dark', 'auto']
   },
+  budgetLimit: {
+    type: Number,
+    default: 1000,
+    min: 0
+  },
+  notifications: {
+    type: Boolean,
+    default: true
+  },
+  autoBackup: {
+    type: Boolean,
+    default: false
+  },
   defaultCategory: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Category',

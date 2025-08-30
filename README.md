@@ -1,6 +1,6 @@
 # Personal Finance Tracker
 
-A modern, responsive personal finance tracking application built with Vue 3, featuring a dashboard layout with sidebar navigation and comprehensive expense management.
+Full‑stack personal finance tracking application: Vue 3 frontend + Express/Mongo backend with analytics, budgeting, and comprehensive automated tests (Vitest + Supertest). All server behaviors documented and enforced by tests.
 
 ## Features
 
@@ -38,11 +38,14 @@ A modern, responsive personal finance tracking application built with Vue 3, fea
 
 ## Tech Stack
 
-- **Vue 3** - Progressive JavaScript framework
-- **Vue Router** - Client-side routing
-- **Chart.js** - Interactive charts and visualizations
-- **IndexedDB** - Browser-based database storage
-- **Vite** - Fast build tool and development server
+Frontend:
+- Vue 3, Vue Router, Chart.js / vue-chartjs, Vite
+
+Backend:
+- Express 5, Mongoose 8 (MongoDB; in‑memory fallback for tests), dotenv
+
+Testing:
+- Vitest, @testing-library/vue, Supertest, mongodb-memory-server, happy-dom/jsdom
 
 ## Quick Start
 
@@ -51,63 +54,86 @@ A modern, responsive personal finance tracking application built with Vue 3, fea
    npm install
    ```
 
-2. **Start Development Server**
+2. **Run Frontend + Backend (dev)**
    ```bash
+   npm run dev:full
+   ```
+   Or run separately:
+   ```bash
+   npm run server:dev
    npm run dev
    ```
 
-3. **Build for Production**
+3. **Build Frontend**
    ```bash
    npm run build
    ```
 
-## Project Structure
+4. **Start Production Server**
+   ```bash
+   npm start
+   ```
+
+## Project Structure (Key)
 
 ```
-src/
-├── components/           # Reusable Vue components
-│   ├── ExpensePieChart.vue
-│   ├── MonthlyChart.vue
-│   └── FinanceTracker.vue
-├── composables/         # Vue composables for state management
-│   └── useDatabase.js
-├── database/           # Database services and configuration
-│   ├── browserDb.js
-│   └── browserServices.js
-├── router/             # Vue Router configuration
-│   └── index.js
-├── views/              # Page components
-│   ├── Dashboard.vue
-│   ├── Expenses.vue
-│   ├── Categories.vue
-│   ├── Analytics.vue
-│   ├── Settings.vue
-│   └── SimpleDashboard.vue
-├── App.vue             # Main application component
-└── main.js            # Application entry point
+server/
+   controllers/        # Express route handlers
+   models/             # Mongoose schemas
+   routes/             # Route definitions (mounted in server.js)
+   database.js         # Connection / in-memory fallback
+src/                  # Vue 3 application
+tests/                # Vitest (unit, client, integration, e2e)
+docs/                 # API.md & openapi.yaml
 ```
 
 ## Data Storage
 
-The application uses **IndexedDB** for client-side data persistence, providing:
-- Offline functionality
-- Fast local storage
-- Automatic data synchronization
-- Cross-browser compatibility
+- Primary: MongoDB (configure `MONGODB_URI`).
+- Fallback (when `MONGODB_URI` absent): Ephemeral in‑memory Mongo via mongodb-memory-server — enables zero‑config demos & deterministic test runs.
 
-## Development
+## Environment Variables
 
-### Adding New Features
-1. Create new components in `src/components/`
-2. Add new views in `src/views/`
-3. Update router in `src/router/index.js`
-4. Extend database services in `src/database/`
+Create `.env` (optional):
+```
+MONGODB_URI=mongodb://localhost:27017/finance_tracker
+PORT=5000
+NODE_ENV=development
+```
+If unset, in‑memory mode logs a warning and data is non‑persistent.
 
-### Customization
-- Modify color schemes in component styles
-- Add new chart types using Chart.js
-- Extend database schema in `browserDb.js`
-- Customize dashboard widgets
+## Testing
+
+```
+npm run test:all         # server + client + integration + e2e
+npm run test:integration # server integration + e2e workflows
+npm run test:server      # backend unit
+npm run test:client      # vue component tests
+```
+
+All mission‑critical flows (budget thresholds, month filters, CRUD consistency, error recovery) are covered.
+
+## API & Docs
+
+Human-readable: `docs/API.md`
+
+OpenAPI: `docs/openapi.yaml`
+
+Key points:
+- Analytics time filters: month (`?month=YYYY-MM`), custom range (`?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD`), rolling period (`?period=week|month|quarter|year`)
+- Budget status thresholds: safe (<70%), warning (70–<90%), critical (90–<100%), over (≥100%)
+- Settings POST (201) create/upsert; PUT (200) update
+- Expenses & deposits populate `category` and add `categoryId`
+
+## Development Workflow
+
+1. Add/modify tests first (red)
+2. Implement feature/fix (green)
+3. Refactor (still green)
+
+## Contributing
+
+PRs welcome. Ensure `npm run test:all` passes and update docs if API changes.
 
 ## Browser Support
 
@@ -118,8 +144,8 @@ The application uses **IndexedDB** for client-side data persistence, providing:
 
 ## License
 
-MIT License - feel free to use for personal or commercial projects.
+MIT.
 
 ---
 
-**Start tracking your finances today! 💰**
+**Track smarter. Ship confidently. 💰**

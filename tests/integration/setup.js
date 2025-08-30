@@ -6,14 +6,24 @@ import request from 'supertest'
 
 let mongo
 
-export async function startTestDb() {
+export async function startIntegrationDb() {
+  // Ensure clean state
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.close()
+  }
+  
   mongo = await MongoMemoryServer.create()
   const uri = mongo.getUri()
   process.env.MONGODB_URI = uri
-  await mongoose.connect(uri)
+  
+  // Connect to the test database
+  await mongoose.connect(uri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+  })
 }
 
-export async function stopTestDb() {
+export async function stopIntegrationDb() {
   if (mongoose.connection.readyState !== 0) {
     await mongoose.connection.close()
   }
@@ -22,19 +32,20 @@ export async function stopTestDb() {
   }
 }
 
-export async function clearTestDb() {
+export async function clearIntegrationDb() {
   const collections = mongoose.connection.collections
   for (const key in collections) {
     await collections[key].deleteMany({})
   }
 }
 
+// Global setup for integration tests only
 beforeAll(async () => {
-  await startTestDb()
+  await startIntegrationDb()
 }, 60000)
 
 afterAll(async () => {
-  await stopTestDb()
+  await stopIntegrationDb()
 }, 30000)
 
 export const api = () => request(app)

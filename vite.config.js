@@ -29,7 +29,7 @@ export default defineConfig(({ command, mode }) => {
           // Chunk splitting for better caching
           manualChunks: {
             vendor: ['vue', 'vue-router'],
-            charts: ['chart.js', 'vue-chartjs']
+            charts: ['chart.js']
           }
         }
       }

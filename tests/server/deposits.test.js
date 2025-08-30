@@ -1,236 +1,348 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import request from 'supertest'
-import express from 'express'
-import depositRoutes from '../../server/routes/deposits.js'
-import { mockDeposits } from '../mocks/mockData.js'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { api, clearTestDb } from './setup.js'
 
-// Mock the Deposit model
-vi.mock('../../server/models/Deposit.js', () => ({
-  default: {
-    find: vi.fn(),
-    findById: vi.fn(),
-    create: vi.fn(),
-    findByIdAndUpdate: vi.fn(),
-    findByIdAndDelete: vi.fn(),
-    deleteMany: vi.fn(),
-    populate: vi.fn()
-  }
-}))
-
-describe('Deposits API Routes', () => {
-  let app
-  let Deposit
-
+describe('Deposits API', () => {
+  let categoryId
+  
   beforeEach(async () => {
-    vi.clearAllMocks()
+    await clearTestDb()
     
-    // Import the mocked Deposit model
-    Deposit = (await import('../../server/models/Deposit.js')).default
-    
-    // Set up Express app with routes
-    app = express()
-    app.use(express.json())
-    app.use('/deposits', depositRoutes)
+    // Create a test income category for deposits
+    const categoryResponse = await api().post('/api/categories').send({
+      name: 'Salary',
+      icon: '💼',
+      color: '#33aa55',
+      type: 'income'
+    })
+    categoryId = categoryResponse.body._id
   })
 
-  describe('GET /deposits', () => {
-    it('should return all deposits with populated categories', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(mockDeposits) }
-      Deposit.find.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .get('/deposits')
-        .expect(200)
-      
-      expect(response.body).toEqual(mockDeposits)
-      expect(Deposit.find).toHaveBeenCalledWith({})
-      expect(mockPopulate.populate).toHaveBeenCalledWith('category')
+  describe('POST /api/deposits', () => {
+    it('creates a deposit successfully', async () => {
+      const depositData = {
+        title: 'Monthly Salary',
+        amount: 5000,
+        category: categoryId,
+        date: new Date().toISOString(),
+        description: 'Regular salary payment',
+        currency: 'INR'
+      }
+
+      const response = await api()
+        .post('/api/deposits')
+        .send(depositData)
+
+      expect(response.status).toBe(201)
+      expect(response.body.title).toBe('Monthly Salary')
+      expect(response.body.amount).toBe(5000)
+      expect(response.body.category).toBeDefined()
+      expect(response.body.category.name).toBe('Salary')
     })
 
-    it('should filter deposits by category', async () => {
-      const filteredDeposits = mockDeposits.filter(dep => dep.category_id === '3')
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(filteredDeposits) }
-      Deposit.find.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .get('/deposits?category=3')
-        .expect(200)
-      
-      expect(response.body).toEqual(filteredDeposits)
-      expect(Deposit.find).toHaveBeenCalledWith({ category: '3' })
+    it('validates required fields', async () => {
+      const response = await api()
+        .post('/api/deposits')
+        .send({ title: 'Test' })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('required')
     })
 
-    it('should filter deposits by date range', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(mockDeposits) }
-      Deposit.find.mockReturnValue(mockPopulate)
-      
-      await request(app)
-        .get('/deposits?startDate=2024-08-01&endDate=2024-08-31')
-        .expect(200)
-      
-      expect(Deposit.find).toHaveBeenCalledWith({
-        date: {
-          $gte: '2024-08-01',
-          $lte: '2024-08-31'
-        }
+    it('validates positive amount', async () => {
+      const response = await api()
+        .post('/api/deposits')
+        .send({
+          title: 'Test',
+          amount: -100,
+          category: categoryId
+        })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('positive')
+    })
+
+    it('validates category exists', async () => {
+      const response = await api()
+        .post('/api/deposits')
+        .send({
+          title: 'Test',
+          amount: 100,
+          category: '507f1f77bcf86cd799439011'
+        })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('Invalid category')
+    })
+  })
+
+  describe('GET /api/deposits', () => {
+    it('returns empty array when no deposits', async () => {
+      const response = await api().get('/api/deposits')
+
+      expect(response.status).toBe(200)
+      expect(response.body).toEqual([])
+    })
+
+    it('returns all deposits with category populated', async () => {
+      await api().post('/api/deposits').send({
+        title: 'Deposit 1',
+        amount: 1000,
+        category: categoryId
       })
+
+      await api().post('/api/deposits').send({
+        title: 'Deposit 2',
+        amount: 1500,
+        category: categoryId
+      })
+
+      const response = await api().get('/api/deposits')
+
+      expect(response.status).toBe(200)
+      expect(response.body).toHaveLength(2)
+      expect(response.body[0].category.name).toBe('Salary')
+      expect(response.body[1].category.name).toBe('Salary')
     })
 
-    it('should handle database errors', async () => {
-      const mockPopulate = { populate: vi.fn().mockRejectedValue(new Error('Database error')) }
-      Deposit.find.mockReturnValue(mockPopulate)
-      
-      await request(app)
-        .get('/deposits')
-        .expect(500)
+    it('sorts deposits by date descending', async () => {
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+
+      const today = new Date()
+
+      await api().post('/api/deposits').send({
+        title: 'Yesterday Deposit',
+        amount: 1000,
+        category: categoryId,
+        date: yesterday.toISOString()
+      })
+
+      await api().post('/api/deposits').send({
+        title: 'Today Deposit',
+        amount: 1500,
+        category: categoryId,
+        date: today.toISOString()
+      })
+
+      const response = await api().get('/api/deposits')
+
+      expect(response.status).toBe(200)
+      expect(response.body[0].title).toBe('Today Deposit')
+      expect(response.body[1].title).toBe('Yesterday Deposit')
     })
   })
 
-  describe('GET /deposits/:id', () => {
-    it('should return a specific deposit', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(mockDeposits[0]) }
-      Deposit.findById.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .get('/deposits/dep1')
-        .expect(200)
-      
-      expect(response.body).toEqual(mockDeposits[0])
-      expect(Deposit.findById).toHaveBeenCalledWith('dep1')
+  describe('GET /api/deposits/:id', () => {
+    it('returns deposit by ID', async () => {
+      const createResponse = await api().post('/api/deposits').send({
+        title: 'Test Deposit',
+        amount: 2000,
+        category: categoryId
+      })
+
+      const response = await api().get(`/api/deposits/${createResponse.body._id}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body.title).toBe('Test Deposit')
+      expect(response.body.category.name).toBe('Salary')
     })
 
-    it('should return 404 for non-existent deposit', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(null) }
-      Deposit.findById.mockReturnValue(mockPopulate)
-      
-      await request(app)
-        .get('/deposits/999')
-        .expect(404)
+    it('returns 404 for non-existent deposit', async () => {
+      const response = await api().get('/api/deposits/507f1f77bcf86cd799439011')
+
+      expect(response.status).toBe(404)
     })
   })
 
-  describe('POST /deposits', () => {
-    it('should create a new deposit', async () => {
-      const newDeposit = {
-        title: 'Bonus',
-        amount: 10000,
-        category: '3',
-        date: '2024-08-21',
-        description: 'Performance bonus'
+  describe('GET /api/deposits/category/:categoryId', () => {
+    it('returns deposits for specific category', async () => {
+      // Create another income category
+      const category2Response = await api().post('/api/categories').send({
+        name: 'Bonus',
+        icon: '💰',
+        color: '#ffaa00',
+        type: 'income'
+      })
+
+      await api().post('/api/deposits').send({
+        title: 'Salary Deposit',
+        amount: 5000,
+        category: categoryId
+      })
+
+      await api().post('/api/deposits').send({
+        title: 'Bonus Deposit',
+        amount: 1000,
+        category: category2Response.body._id
+      })
+
+      const response = await api().get(`/api/deposits/category/${categoryId}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body).toHaveLength(1)
+      expect(response.body[0].title).toBe('Salary Deposit')
+    })
+  })
+
+  describe('GET /api/deposits/date-range', () => {
+    it('returns deposits within date range', async () => {
+      const today = new Date()
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      const twoDaysAgo = new Date()
+      twoDaysAgo.setDate(twoDaysAgo.getDate() - 2)
+
+      await api().post('/api/deposits').send({
+        title: 'Old Deposit',
+        amount: 1000,
+        category: categoryId,
+        date: twoDaysAgo.toISOString()
+      })
+
+      await api().post('/api/deposits').send({
+        title: 'Recent Deposit',
+        amount: 2000,
+        category: categoryId,
+        date: yesterday.toISOString()
+      })
+
+      const response = await api()
+        .get('/api/deposits/date-range')
+        .query({
+          startDate: yesterday.toISOString().split('T')[0],
+          endDate: today.toISOString().split('T')[0]
+        })
+
+      expect(response.status).toBe(200)
+      expect(response.body).toHaveLength(1)
+      expect(response.body[0].title).toBe('Recent Deposit')
+    })
+
+    it('validates required date parameters', async () => {
+      const response = await api().get('/api/deposits/date-range')
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('required')
+    })
+  })
+
+  describe('PUT /api/deposits/:id', () => {
+    it('updates deposit successfully', async () => {
+      const createResponse = await api().post('/api/deposits').send({
+        title: 'Original Title',
+        amount: 3000,
+        category: categoryId
+      })
+
+      const updateData = {
+        title: 'Updated Title',
+        amount: 3500,
+        category: categoryId,
+        description: 'Updated description',
+        currency: 'USD'
       }
-      
-      const createdDeposit = { _id: 'dep3', ...newDeposit }
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(createdDeposit) }
-      Deposit.create.mockResolvedValue({ _id: 'dep3', ...newDeposit })
-      Deposit.findById.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .post('/deposits')
-        .send(newDeposit)
-        .expect(201)
-      
-      expect(response.body).toEqual(createdDeposit)
-      expect(Deposit.create).toHaveBeenCalledWith(newDeposit)
+
+      const response = await api()
+        .put(`/api/deposits/${createResponse.body._id}`)
+        .send(updateData)
+
+      expect(response.status).toBe(200)
+      expect(response.body.title).toBe('Updated Title')
+      expect(response.body.amount).toBe(3500)
+      expect(response.body.currency).toBe('USD')
     })
 
-    it('should validate required fields', async () => {
-      const invalidDeposit = {
-        // missing required fields
-        description: 'Test'
-      }
-      
-      await request(app)
-        .post('/deposits')
-        .send(invalidDeposit)
-        .expect(400)
-    })
+    it('returns 404 for non-existent deposit', async () => {
+      const response = await api()
+        .put('/api/deposits/507f1f77bcf86cd799439011')
+        .send({
+          title: 'Test',
+          amount: 1000,
+          category: categoryId
+        })
 
-    it('should handle validation errors', async () => {
-      const newDeposit = {
-        title: 'Bonus',
-        amount: 10000,
-        category: '3',
-        date: '2024-08-21'
-      }
-      
-      Deposit.create.mockRejectedValue(new Error('Validation error'))
-      
-      await request(app)
-        .post('/deposits')
-        .send(newDeposit)
-        .expect(500)
+      expect(response.status).toBe(404)
     })
   })
 
-  describe('PUT /deposits/:id', () => {
-    it('should update an existing deposit', async () => {
-      const updatedDeposit = { ...mockDeposits[0], amount: 80000 }
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(updatedDeposit) }
-      Deposit.findByIdAndUpdate.mockReturnValue(mockPopulate)
-      
-      const response = await request(app)
-        .put('/deposits/dep1')
-        .send({ amount: 80000 })
-        .expect(200)
-      
-      expect(response.body).toEqual(updatedDeposit)
-      expect(Deposit.findByIdAndUpdate).toHaveBeenCalledWith(
-        'dep1',
-        { amount: 80000 },
-        { new: true, runValidators: true }
-      )
+  describe('DELETE /api/deposits/:id', () => {
+    it('deletes deposit successfully', async () => {
+      const createResponse = await api().post('/api/deposits').send({
+        title: 'To Delete',
+        amount: 1000,
+        category: categoryId
+      })
+
+      const response = await api().delete(`/api/deposits/${createResponse.body._id}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body.message).toContain('deleted successfully')
     })
 
-    it('should return 404 for non-existent deposit', async () => {
-      const mockPopulate = { populate: vi.fn().mockResolvedValue(null) }
-      Deposit.findByIdAndUpdate.mockReturnValue(mockPopulate)
-      
-      await request(app)
-        .put('/deposits/999')
-        .send({ amount: 80000 })
-        .expect(404)
+    it('returns 404 for non-existent deposit', async () => {
+      const response = await api().delete('/api/deposits/507f1f77bcf86cd799439011')
+
+      expect(response.status).toBe(404)
     })
   })
 
-  describe('DELETE /deposits/:id', () => {
-    it('should delete a deposit', async () => {
-      Deposit.findByIdAndDelete.mockResolvedValue(mockDeposits[0])
-      
-      await request(app)
-        .delete('/deposits/dep1')
-        .expect(200)
-      
-      expect(Deposit.findByIdAndDelete).toHaveBeenCalledWith('dep1')
+  describe('GET /api/deposits/summary', () => {
+    it('returns deposit summary', async () => {
+      await api().post('/api/deposits').send({
+        title: 'Deposit 1',
+        amount: 3000,
+        category: categoryId
+      })
+
+      await api().post('/api/deposits').send({
+        title: 'Deposit 2',
+        amount: 2000,
+        category: categoryId
+      })
+
+      const response = await api().get('/api/deposits/summary')
+
+      expect(response.status).toBe(200)
+      expect(response.body.totalDeposits).toBe(5000)
+      expect(response.body.depositCount).toBe(2)
+      expect(response.body.categoryBreakdown).toBeDefined()
+      expect(response.body.monthlyTotals).toBeDefined()
+      expect(response.body.recentDeposits).toBeDefined()
     })
 
-    it('should return 404 for non-existent deposit', async () => {
-      Deposit.findByIdAndDelete.mockResolvedValue(null)
-      
-      await request(app)
-        .delete('/deposits/999')
-        .expect(404)
-    })
-  })
+    it('returns correct category breakdown', async () => {
+      // Create another income category
+      const category2Response = await api().post('/api/categories').send({
+        name: 'Bonus',
+        icon: '💰',
+        color: '#ffaa00',
+        type: 'income'
+      })
 
-  describe('DELETE /deposits/clear-all', () => {
-    it('should delete all deposits', async () => {
-      Deposit.deleteMany.mockResolvedValue({ deletedCount: 2 })
-      
-      const response = await request(app)
-        .delete('/deposits/clear-all')
-        .expect(200)
-      
-      expect(response.body.message).toContain('All deposits deleted')
-      expect(response.body.deletedCount).toBe(2)
-      expect(Deposit.deleteMany).toHaveBeenCalledWith({})
-    })
+      await api().post('/api/deposits').send({
+        title: 'Salary Deposit',
+        amount: 5000,
+        category: categoryId
+      })
 
-    it('should handle deletion errors', async () => {
-      Deposit.deleteMany.mockRejectedValue(new Error('Deletion failed'))
+      await api().post('/api/deposits').send({
+        title: 'Bonus Deposit',
+        amount: 1000,
+        category: category2Response.body._id
+      })
+
+      const response = await api().get('/api/deposits/summary')
+
+      expect(response.status).toBe(200)
       
-      await request(app)
-        .delete('/deposits/clear-all')
-        .expect(500)
+      const breakdown = response.body.categoryBreakdown
+      const salaryCategory = Object.values(breakdown).find(cat => cat.name === 'Salary')
+      const bonusCategory = Object.values(breakdown).find(cat => cat.name === 'Bonus')
+
+      expect(salaryCategory.total).toBe(5000)
+      expect(salaryCategory.count).toBe(1)
+      expect(bonusCategory.total).toBe(1000)
+      expect(bonusCategory.count).toBe(1)
     })
   })
 })

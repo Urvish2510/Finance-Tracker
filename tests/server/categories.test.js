@@ -1,210 +1,256 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import request from 'supertest'
-import express from 'express'
-import categoryRoutes from '../../server/routes/categories.js'
-import { mockCategories } from '../mocks/mockData.js'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { api, clearTestDb } from './setup.js'
 
-// Mock the Category model
-vi.mock('../../server/models/Category.js', () => ({
-  default: {
-    find: vi.fn(),
-    findById: vi.fn(),
-    create: vi.fn(),
-    findByIdAndUpdate: vi.fn(),
-    findByIdAndDelete: vi.fn(),
-    deleteMany: vi.fn()
-  }
-}))
-
-describe('Categories API Routes', () => {
-  let app
-  let Category
-
+describe('Categories API', () => {
   beforeEach(async () => {
-    vi.clearAllMocks()
-    
-    // Import the mocked Category model
-    Category = (await import('../../server/models/Category.js')).default
-    
-    // Set up Express app with routes
-    app = express()
-    app.use(express.json())
-    app.use('/categories', categoryRoutes)
+    await clearTestDb()
   })
 
-  describe('GET /categories', () => {
-    it('should return all categories', async () => {
-      Category.find.mockResolvedValue(mockCategories)
-      
-      const response = await request(app)
-        .get('/categories')
-        .expect(200)
-      
-      expect(response.body).toEqual(mockCategories)
-      expect(Category.find).toHaveBeenCalledWith({})
-    })
-
-    it('should filter categories by type', async () => {
-      const expenseCategories = mockCategories.filter(cat => cat.type === 'expense')
-      Category.find.mockResolvedValue(expenseCategories)
-      
-      const response = await request(app)
-        .get('/categories?type=expense')
-        .expect(200)
-      
-      expect(response.body).toEqual(expenseCategories)
-      expect(Category.find).toHaveBeenCalledWith({ type: 'expense' })
-    })
-
-    it('should handle database errors', async () => {
-      Category.find.mockRejectedValue(new Error('Database error'))
-      
-      await request(app)
-        .get('/categories')
-        .expect(500)
-    })
-  })
-
-  describe('GET /categories/:id', () => {
-    it('should return a specific category', async () => {
-      Category.findById.mockResolvedValue(mockCategories[0])
-      
-      const response = await request(app)
-        .get('/categories/1')
-        .expect(200)
-      
-      expect(response.body).toEqual(mockCategories[0])
-      expect(Category.findById).toHaveBeenCalledWith('1')
-    })
-
-    it('should return 404 for non-existent category', async () => {
-      Category.findById.mockResolvedValue(null)
-      
-      await request(app)
-        .get('/categories/999')
-        .expect(404)
-    })
-  })
-
-  describe('POST /categories', () => {
-    it('should create a new category', async () => {
-      const newCategory = {
-        name: 'Entertainment',
-        icon: '🎬',
-        color: '#FF9F43',
-        type: 'expense',
-        budget: 2000
+  describe('POST /api/categories', () => {
+    it('creates a new category successfully', async () => {
+      const categoryData = {
+        name: 'Food',
+        icon: '🍔',
+        color: '#ff8800',
+        type: 'expense'
       }
-      
-      const createdCategory = { _id: '4', ...newCategory }
-      Category.create.mockResolvedValue(createdCategory)
-      
-      const response = await request(app)
-        .post('/categories')
-        .send(newCategory)
-        .expect(201)
-      
-      expect(response.body).toEqual(createdCategory)
-      expect(Category.create).toHaveBeenCalledWith(newCategory)
+
+      const response = await api()
+        .post('/api/categories')
+        .send(categoryData)
+
+      expect(response.status).toBe(201)
+      expect(response.body.name).toBe('Food')
+      expect(response.body.icon).toBe('🍔')
+      expect(response.body.color).toBe('#ff8800')
+      expect(response.body.type).toBe('expense')
     })
 
-    it('should validate required fields', async () => {
-      const invalidCategory = {
-        // missing required fields
-        color: '#FF9F43'
+    it('creates income category', async () => {
+      const categoryData = {
+        name: 'Salary',
+        icon: '💼',
+        color: '#33aa55',
+        type: 'income'
       }
-      
-      await request(app)
-        .post('/categories')
-        .send(invalidCategory)
-        .expect(400)
+
+      const response = await api()
+        .post('/api/categories')
+        .send(categoryData)
+
+      expect(response.status).toBe(201)
+      expect(response.body.type).toBe('income')
     })
 
-    it('should handle validation errors', async () => {
-      const newCategory = {
-        name: 'Entertainment',
-        icon: '🎬',
-        color: '#FF9F43',
-        type: 'expense',
-        budget: 2000
+    it('rejects duplicate category name for same type', async () => {
+      const categoryData = {
+        name: 'Transport',
+        icon: '🚌',
+        color: '#00aaee',
+        type: 'expense'
       }
+
+      await api().post('/api/categories').send(categoryData)
       
-      Category.create.mockRejectedValue(new Error('Validation error'))
-      
-      await request(app)
-        .post('/categories')
-        .send(newCategory)
-        .expect(500)
+      const duplicateResponse = await api()
+        .post('/api/categories')
+        .send(categoryData)
+
+      expect(duplicateResponse.status).toBe(400)
+      expect(duplicateResponse.body.error).toContain('already exists')
+    })
+
+    it('allows same name for different types', async () => {
+      const expenseCategory = {
+        name: 'Bonus',
+        icon: '💰',
+        color: '#ffaa00',
+        type: 'expense'
+      }
+
+      const incomeCategory = {
+        name: 'Bonus',
+        icon: '💰',
+        color: '#ffaa00',
+        type: 'income'
+      }
+
+      const response1 = await api().post('/api/categories').send(expenseCategory)
+      const response2 = await api().post('/api/categories').send(incomeCategory)
+
+      expect(response1.status).toBe(201)
+      expect(response2.status).toBe(201)
+    })
+
+    it('validates required fields', async () => {
+      const response = await api()
+        .post('/api/categories')
+        .send({ name: 'Test' })
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('required')
     })
   })
 
-  describe('PUT /categories/:id', () => {
-    it('should update an existing category', async () => {
-      const updatedCategory = { ...mockCategories[0], name: 'Updated Food' }
-      Category.findByIdAndUpdate.mockResolvedValue(updatedCategory)
-      
-      const response = await request(app)
-        .put('/categories/1')
-        .send({ name: 'Updated Food' })
-        .expect(200)
-      
-      expect(response.body).toEqual(updatedCategory)
-      expect(Category.findByIdAndUpdate).toHaveBeenCalledWith(
-        '1',
-        { name: 'Updated Food' },
-        { new: true, runValidators: true }
-      )
+  describe('GET /api/categories', () => {
+    it('returns empty array when no categories', async () => {
+      const response = await api().get('/api/categories')
+
+      expect(response.status).toBe(200)
+      expect(response.body).toEqual([])
     })
 
-    it('should return 404 for non-existent category', async () => {
-      Category.findByIdAndUpdate.mockResolvedValue(null)
-      
-      await request(app)
-        .put('/categories/999')
+    it('returns all categories', async () => {
+      await api().post('/api/categories').send({
+        name: 'Food',
+        icon: '🍔',
+        color: '#ff8800',
+        type: 'expense'
+      })
+
+      await api().post('/api/categories').send({
+        name: 'Transport',
+        icon: '🚌',
+        color: '#00aaee',
+        type: 'expense'
+      })
+
+      const response = await api().get('/api/categories')
+
+      expect(response.status).toBe(200)
+      expect(response.body).toHaveLength(2)
+      expect(response.body[0].name).toBe('Food')
+      expect(response.body[1].name).toBe('Transport')
+    })
+
+    it('filters categories by type', async () => {
+      await api().post('/api/categories').send({
+        name: 'Food',
+        icon: '🍔',
+        color: '#ff8800',
+        type: 'expense'
+      })
+
+      await api().post('/api/categories').send({
+        name: 'Salary',
+        icon: '💼',
+        color: '#33aa55',
+        type: 'income'
+      })
+
+      const expenseResponse = await api().get('/api/categories?type=expense')
+      const incomeResponse = await api().get('/api/categories?type=income')
+
+      expect(expenseResponse.status).toBe(200)
+      expect(expenseResponse.body).toHaveLength(1)
+      expect(expenseResponse.body[0].type).toBe('expense')
+
+      expect(incomeResponse.status).toBe(200)
+      expect(incomeResponse.body).toHaveLength(1)
+      expect(incomeResponse.body[0].type).toBe('income')
+    })
+  })
+
+  describe('GET /api/categories/:id', () => {
+    it('returns category by ID', async () => {
+      const createResponse = await api().post('/api/categories').send({
+        name: 'Food',
+        icon: '🍔',
+        color: '#ff8800',
+        type: 'expense'
+      })
+
+      const response = await api().get(`/api/categories/${createResponse.body._id}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body.name).toBe('Food')
+    })
+
+    it('returns 404 for non-existent category', async () => {
+      const response = await api().get('/api/categories/507f1f77bcf86cd799439011')
+
+      expect(response.status).toBe(404)
+    })
+  })
+
+  describe('PUT /api/categories/:id', () => {
+    it('updates category successfully', async () => {
+      const createResponse = await api().post('/api/categories').send({
+        name: 'Food',
+        icon: '🍔',
+        color: '#ff8800',
+        type: 'expense'
+      })
+
+      const updateData = {
+        name: 'Meals',
+        icon: '🍽️',
+        color: '#ff6600',
+        type: 'expense'
+      }
+
+      const response = await api()
+        .put(`/api/categories/${createResponse.body._id}`)
+        .send(updateData)
+
+      expect(response.status).toBe(200)
+      expect(response.body.name).toBe('Meals')
+      expect(response.body.icon).toBe('🍽️')
+    })
+
+    it('validates required fields on update', async () => {
+      const createResponse = await api().post('/api/categories').send({
+        name: 'Food',
+        icon: '🍔',
+        color: '#ff8800',
+        type: 'expense'
+      })
+
+      const response = await api()
+        .put(`/api/categories/${createResponse.body._id}`)
         .send({ name: 'Updated' })
-        .expect(404)
+
+      expect(response.status).toBe(400)
     })
   })
 
-  describe('DELETE /categories/:id', () => {
-    it('should delete a category', async () => {
-      Category.findByIdAndDelete.mockResolvedValue(mockCategories[0])
-      
-      await request(app)
-        .delete('/categories/1')
-        .expect(200)
-      
-      expect(Category.findByIdAndDelete).toHaveBeenCalledWith('1')
+  describe('DELETE /api/categories/:id', () => {
+    it('deletes category without expenses', async () => {
+      const createResponse = await api().post('/api/categories').send({
+        name: 'Food',
+        icon: '🍔',
+        color: '#ff8800',
+        type: 'expense'
+      })
+
+      const response = await api().delete(`/api/categories/${createResponse.body._id}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body.message).toContain('deleted successfully')
     })
 
-    it('should return 404 for non-existent category', async () => {
-      Category.findByIdAndDelete.mockResolvedValue(null)
-      
-      await request(app)
-        .delete('/categories/999')
-        .expect(404)
-    })
-  })
+    it('prevents deletion of category with expenses', async () => {
+      // First create a category
+      const categoryResponse = await api().post('/api/categories').send({
+        name: 'Food',
+        icon: '🍔',
+        color: '#ff8800',
+        type: 'expense'
+      })
 
-  describe('DELETE /categories/clear-all', () => {
-    it('should delete all categories', async () => {
-      Category.deleteMany.mockResolvedValue({ deletedCount: 3 })
-      
-      const response = await request(app)
-        .delete('/categories/clear-all')
-        .expect(200)
-      
-      expect(response.body.message).toContain('All categories deleted')
-      expect(response.body.deletedCount).toBe(3)
-      expect(Category.deleteMany).toHaveBeenCalledWith({})
-    })
+      // Then create an expense with that category
+      await api().post('/api/expenses').send({
+        title: 'Lunch',
+        amount: 25,
+        category: categoryResponse.body._id,
+        date: new Date().toISOString()
+      })
 
-    it('should handle deletion errors', async () => {
-      Category.deleteMany.mockRejectedValue(new Error('Deletion failed'))
-      
-      await request(app)
-        .delete('/categories/clear-all')
-        .expect(500)
+      // Try to delete the category
+      const response = await api().delete(`/api/categories/${categoryResponse.body._id}`)
+
+      expect(response.status).toBe(400)
+      expect(response.body.error).toContain('has expenses')
     })
   })
 })
