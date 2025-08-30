@@ -213,10 +213,6 @@ jest_cache/
 /cypress/screenshots/
 /cypress/downloads/
 
-# Environment files (keep templates, ignore local overrides)
-.env.local
-.env.*.local
-
 # Package manager lockfiles (choose one, comment out the others)
 # npm
 package-lock.json
