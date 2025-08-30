@@ -1,3 +1,7 @@
+.env
+.env.*
+!.env.example
+
 # Logs
 logs
 *.log
@@ -25,20 +29,6 @@ jspm_packages/
 
 # Yarn Integrity file
 .yarn-integrity
-
-# dotenv environment variables file
-.env
-.env*
-# .env.local
-# .env.production.local
-# .env.test.local
-
-# # Keep template environment files but ignore local ones
-# .env.development
-# .env.production  
-# .env.development.local
-# .env.production.local
-# .env.test.local
 
 # Runtime data
 pids
