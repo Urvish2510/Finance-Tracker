@@ -33,6 +33,50 @@
         </div>
       </div>
 
+      <!-- Global Date Range Filter -->
+      <div class="global-filter-section">
+        <div class="filter-header">
+          <h3 class="filter-title">📅 Date Range Filter</h3>
+          <p class="filter-subtitle">Select time period to analyze your financial data</p>
+        </div>
+        
+        <div class="date-range-container">
+          <!-- Quick preset buttons -->
+          <div class="preset-buttons">
+            <button 
+              v-for="preset in datePresets" 
+              :key="preset.key"
+              @click="selectPreset(preset.key)"
+              :class="['preset-btn', { active: selectedPreset === preset.key }]"
+            >
+              {{ preset.label }}
+            </button>
+          </div>
+          
+          <!-- Custom date range inputs -->
+          <div class="custom-range" v-if="selectedPreset === 'custom'">
+            <div class="date-input-group">
+              <label class="date-label">From:</label>
+              <input 
+                type="date" 
+                v-model="customStartDate" 
+                @change="selectCustomRange"
+                class="date-input"
+              >
+            </div>
+            <div class="date-input-group">
+              <label class="date-label">To:</label>
+              <input 
+                type="date" 
+                v-model="customEndDate" 
+                @change="selectCustomRange"
+                class="date-input"
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+
     <!-- Key Metrics Summary -->
     <div class="summary-section">
       <h2 class="section-title">📈 Key Metrics</h2>
@@ -89,15 +133,15 @@
       <div class="charts-grid">
         <!-- New Self-Contained Charts -->
         <div class="chart-item">
-          <ExpensePieChartNew />
+          <ExpensePieChartNew :date-range="getCurrentDateRange()" />
         </div>
-        
+
         <div class="chart-item">
-          <SpendingTrendChart />
+          <SpendingTrendChart :date-range="getCurrentDateRange()" />
         </div>
-        
+
         <div class="chart-item full-width">
-          <CategoryComparisonChart />
+          <CategoryComparisonChart :date-range="getCurrentDateRange()" />
         </div>
       </div>
     </div>
@@ -110,13 +154,6 @@
           <p class="section-subtitle">Detailed analysis by category with smart insights</p>
         </div>
         <div class="section-controls">
-          <select v-model="selectedPeriod" class="period-select">
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="quarter">This Quarter</option>
-            <option value="year">This Year</option>
-            <option value="all">All Time</option>
-          </select>
           <button @click="exportData" class="btn btn-secondary">
             📄 Export Data
           </button>
@@ -274,7 +311,76 @@ const { formatCurrency } = useCurrency()
 // Reactive data
 const loading = ref(false)
 const analytics = ref({})
-const selectedPeriod = ref('month')
+
+// Date range functionality
+const selectedPreset = ref('month')
+const today = new Date().toISOString().split('T')[0]
+const lastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+const customStartDate = ref(lastMonth)
+const customEndDate = ref(today)
+
+// Date presets
+const datePresets = ref([
+  { key: 'week', label: 'Last 7 Days' },
+  { key: 'month', label: 'Last 30 Days' },
+  { key: 'quarter', label: 'Last 3 Months' },
+  { key: 'year', label: 'Last Year' },
+  { key: 'all', label: 'All Time' },
+  { key: 'custom', label: 'Custom Range' }
+])
+
+// Get current date range based on selection
+const getCurrentDateRange = () => {
+  const now = new Date()
+  
+  if (selectedPreset.value === 'custom' && customStartDate.value && customEndDate.value) {
+    return {
+      startDate: customStartDate.value,
+      endDate: customEndDate.value
+    }
+  }
+  
+  // Calculate preset ranges
+  let startDate
+  switch (selectedPreset.value) {
+    case 'week':
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      break
+    case 'month':
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      break
+    case 'quarter':
+      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+      break
+    case 'year':
+      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
+      break
+    default: // 'all'
+      startDate = new Date(0)
+  }
+  
+  return {
+    startDate: startDate.toISOString().split('T')[0],
+    endDate: now.toISOString().split('T')[0]
+  }
+}
+
+// Methods for date range selection
+const selectPreset = (presetKey) => {
+  selectedPreset.value = presetKey
+  if (presetKey !== 'custom') {
+    customStartDate.value = ''
+    customEndDate.value = ''
+  }
+  calculateAnalytics()
+}
+
+const selectCustomRange = () => {
+  if (customStartDate.value && customEndDate.value) {
+    selectedPreset.value = 'custom'
+    calculateAnalytics()
+  }
+}
 
 // Computed properties for summary section
 const categoryBreakdown = computed(() => analytics.value.categoryBreakdown || [])
@@ -385,37 +491,24 @@ const calculateAnalytics = () => {
     return
   }
 
-  const now = new Date()
-  let startDate
-
-  // Calculate date range based on selected period
-  switch (selectedPeriod.value) {
-    case 'week':
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-      break
-    case 'month':
-      startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
-      break
-    case 'quarter':
-      startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
-      break
-    case 'year':
-      startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate())
-      break
-    default:
-      startDate = new Date(0) // All time
-  }
+  // Get current date range
+  const dateRange = getCurrentDateRange()
+  const startDate = new Date(dateRange.startDate)
+  const endDate = new Date(dateRange.endDate)
+  
+  // Set end date to end of day for proper filtering
+  endDate.setHours(23, 59, 59, 999)
 
   // Filter expenses for the selected period
   const periodExpenses = expenses.value.filter(expense => {
     const expenseDate = new Date(expense.date)
-    return expenseDate >= startDate && expenseDate <= now
+    return expenseDate >= startDate && expenseDate <= endDate
   })
 
   // Calculate basic metrics
   const totalSpent = periodExpenses.reduce((sum, expense) => sum + expense.amount, 0)
   const transactionCount = periodExpenses.length
-  const daysInPeriod = Math.max(1, Math.ceil((now - startDate) / (24 * 60 * 60 * 1000)))
+  const daysInPeriod = Math.max(1, Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000)))
   const avgPerDay = totalSpent / daysInPeriod
 
   // Calculate category breakdown
@@ -510,8 +603,8 @@ watch([expenses, categories], () => {
   calculateAnalytics()
 })
 
-// Watch for period changes
-watch(selectedPeriod, () => {
+// Watch for date range changes
+watch([selectedPreset, customStartDate, customEndDate], () => {
   calculateAnalytics()
 })
 
@@ -676,6 +769,34 @@ onMounted(async () => {
 .table-section,
 .insights-section {
   margin-bottom: var(--space-2);
+}
+
+/* Global Filter Section */
+.global-filter-section {
+  background: var(--color-surface-primary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--card-radius);
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-header {
+  text-align: center;
+  margin-bottom: var(--space-4);
+}
+
+.filter-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.filter-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
 }
 
 .section-title {
@@ -935,19 +1056,78 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.period-select {
+/* Date Range Controls */
+.date-range-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: center;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.preset-buttons {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.preset-btn {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--button-radius);
+  background: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  min-height: 32px;
+}
+
+.preset-btn:hover {
+  background: var(--color-surface-secondary);
+  border-color: var(--color-primary);
+}
+
+.preset-btn.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.custom-range {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.date-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.date-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+}
+
+.date-input {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border-primary);
   border-radius: var(--input-radius);
   background: var(--color-surface-primary);
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
-  cursor: pointer;
-  height: 40px;
   min-width: 140px;
+  height: 36px;
 }
 
-.period-select:focus {
+.date-input:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 2px var(--color-primary-alpha);
@@ -1392,10 +1572,31 @@ onMounted(async () => {
   .section-controls {
     justify-content: space-between;
     flex-wrap: wrap;
+    gap: var(--space-3);
   }
 
-  .period-select {
-    min-width: 120px;
+  .date-range-container {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .preset-buttons {
+    justify-content: center;
+  }
+
+  .custom-range {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+
+  .date-input-group {
+    align-items: stretch;
+  }
+
+  .date-input {
+    min-width: auto;
+    width: 100%;
   }
 
   .actions-grid {

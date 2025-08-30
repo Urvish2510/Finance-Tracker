@@ -51,6 +51,12 @@
       <div class="section-header">
         <h2>Recent Deposits</h2>
         <div class="filters">
+          <input 
+            v-model="searchQuery"
+            type="text" 
+            placeholder="Search deposits..."
+            class="search-input"
+          />
           <select v-model="filterCategory" @change="filterDeposits">
             <option value="">All Categories</option>
             <option
@@ -74,7 +80,7 @@
 
       <div v-else class="deposits-list">
         <div
-          v-for="deposit in filteredDeposits"
+          v-for="deposit in paginatedDeposits"
           :key="deposit._id"
           class="deposit-item"
         >
@@ -101,6 +107,30 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="pagination">
+        <button 
+          @click="currentPage = Math.max(1, currentPage - 1)"
+          :disabled="currentPage === 1"
+          class="page-btn"
+        >
+          ← Previous
+        </button>
+        
+        <span class="page-info">
+          Page {{ currentPage }} of {{ totalPages }} 
+          ({{ filteredDeposits.length }} deposits)
+        </span>
+        
+        <button 
+          @click="currentPage = Math.min(totalPages, currentPage + 1)"
+          :disabled="currentPage === totalPages"
+          class="page-btn"
+        >
+          Next →
+        </button>
       </div>
     </div>
   </div>
@@ -135,6 +165,11 @@ const saving = ref(false);
 const showForm = ref(false);
 const editingDeposit = ref(null);
 const filterCategory = ref('');
+const searchQuery = ref('');
+
+// Pagination
+const currentPage = ref(1);
+const itemsPerPage = 10;
 
 // Form state
 const form = ref({
@@ -151,11 +186,36 @@ const incomeCategories = computed(() =>
 );
 
 const filteredDeposits = computed(() => {
-  if (!filterCategory.value) return deposits.value;
-  return deposits.value.filter(deposit => 
-    deposit.category?._id === filterCategory.value ||
-    deposit.category_id === filterCategory.value
-  );
+  let filtered = deposits.value;
+  
+  // Filter by search query
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    filtered = filtered.filter(deposit => 
+      deposit.title.toLowerCase().includes(query) ||
+      deposit.description?.toLowerCase().includes(query)
+    );
+  }
+  
+  // Filter by category
+  if (filterCategory.value) {
+    filtered = filtered.filter(deposit => 
+      deposit.category?._id === filterCategory.value ||
+      deposit.category_id === filterCategory.value
+    );
+  }
+  
+  return filtered;
+});
+
+const totalPages = computed(() => {
+  return Math.ceil(filteredDeposits.value.length / itemsPerPage);
+});
+
+const paginatedDeposits = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  const end = start + itemsPerPage;
+  return filteredDeposits.value.slice(start, end);
 });
 
 const totalIncome = computed(() => 
@@ -537,6 +597,28 @@ onMounted(async () => {
   font-weight: var(--font-weight-bold);
 }
 
+.filters {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.search-input {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-primary);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  min-width: 200px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-alpha);
+}
+
 .filters select {
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border-primary);
@@ -739,5 +821,55 @@ onMounted(async () => {
   .section-header h2 {
     font-size: var(--font-size-lg);
   }
+}
+
+/* Pagination Styles */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border-primary);
+}
+
+.page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--button-padding-x-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: var(--transition-all);
+  user-select: none;
+  text-decoration: none;
+  white-space: nowrap;
+  height: var(--button-height-sm);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-color: var(--color-primary);
+}
+
+.page-btn:hover:not(:disabled) {
+  background-color: var(--color-primary-700);
+  border-color: var(--color-primary-700);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.page-btn:disabled {
+  background-color: var(--color-surface-secondary);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-primary);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
 }
 </style>

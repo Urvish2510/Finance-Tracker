@@ -3,13 +3,6 @@
     <div class="chart-header">
       <h3 class="chart-title">📈 Spending Trends</h3>
       <div class="chart-controls">
-        <select v-model="selectedPeriod" class="period-select">
-          <option value="week">Last 7 Days</option>
-          <option value="month">Last 30 Days</option>
-          <option value="quarter">Last 3 Months</option>
-          <option value="year">Last 12 Months</option>
-          <option value="all">All Time</option>
-        </select>
         <select v-model="chartType" class="chart-type-select">
           <option value="bar">📊 Bar Chart</option>
           <option value="line">📈 Line Chart</option>
@@ -55,6 +48,18 @@ import { useCurrency } from '../composables/useCurrency.js'
 import { useTheme } from '../composables/useTheme.js'
 import Chart from 'chart.js/auto'
 
+// Props
+const props = defineProps({
+  dateRange: {
+    type: Object,
+    required: true,
+    default: () => ({
+      startDate: new Date(0).toISOString().split('T')[0],
+      endDate: new Date().toISOString().split('T')[0]
+    })
+  }
+})
+
 // Composables
 const { expenses, loadExpenses } = useGlobalStore()
 const { formatCurrency } = useCurrency()
@@ -65,60 +70,47 @@ const chartCanvas = ref(null)
 const chartContainer = ref(null)
 
 // Reactive state
-const selectedPeriod = ref('month')
 const chartType = ref('bar')
 const loading = ref(false)
 let chartInstance = null
 let creating = false
 
-// Computed properties
+// Get period label based on date range duration
 const periodLabel = computed(() => {
-  switch (selectedPeriod.value) {
-    case 'week': return 'Day'
-    case 'month': return 'Day'
-    case 'quarter': return 'Week'
-    case 'year': return 'Month'
-    case 'all': return 'Month'
-    default: return 'Period'
-  }
+  if (!props.dateRange) return 'Period'
+  
+  const startDate = new Date(props.dateRange.startDate)
+  const endDate = new Date(props.dateRange.endDate)
+  const daysDiff = Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000))
+  
+  if (daysDiff <= 7) return 'Day'
+  if (daysDiff <= 31) return 'Day'  
+  if (daysDiff <= 90) return 'Week'
+  return 'Month'
 })
 
 const chartData = computed(() => {
-  if (!expenses.value.length) return null
+  if (!expenses.value.length || !props.dateRange) return null
 
-  const now = new Date()
-  let startDate
+  const startDate = new Date(props.dateRange.startDate)
+  const endDate = new Date(props.dateRange.endDate)
+  
+  // Set end date to end of day for proper filtering
+  endDate.setHours(23, 59, 59, 999)
+
+  // Determine grouping based on date range duration
+  const daysDiff = Math.ceil((endDate - startDate) / (24 * 60 * 60 * 1000))
   let groupBy = 'month'
-
-  switch (selectedPeriod.value) {
-    case 'week': // last 7 days
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-      groupBy = 'day'
-      break
-    case 'month': // last 30 days
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      groupBy = 'day'
-      break
-    case 'quarter': // last 90 days
-      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-      groupBy = 'week'
-      break
-    case 'year': // last 365 days
-      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000)
-      groupBy = 'month'
-      break
-    default: // all time
-      startDate = new Date(expenses.value.reduce((earliest, expense) => {
-        const expenseDate = new Date(expense.date)
-        return expenseDate < earliest ? expenseDate : earliest
-      }, now))
-      groupBy = 'month'
-  }
+  
+  if (daysDiff <= 7) groupBy = 'day'
+  else if (daysDiff <= 31) groupBy = 'day'
+  else if (daysDiff <= 90) groupBy = 'week'
+  else groupBy = 'month'
 
   // Filter expenses for the selected period
   const filteredExpenses = expenses.value.filter(expense => {
     const expenseDate = new Date(expense.date)
-    return expenseDate >= startDate && expenseDate <= now
+    return expenseDate >= startDate && expenseDate <= endDate
   })
 
   if (!filteredExpenses.length) return null
@@ -163,7 +155,7 @@ const chartData = computed(() => {
         return date.toLocaleDateString('en-US', { 
           month: 'short', 
           day: 'numeric',
-          ...(selectedPeriod.value === 'week' ? {} : { year: '2-digit' })
+          ...(daysDiff <= 7 ? {} : { year: '2-digit' })
         })
       case 'week':
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' (Week)'
@@ -175,7 +167,7 @@ const chartData = computed(() => {
 
   const data = sortedEntries.map(([, amount]) => amount)
   if (import.meta?.env?.DEV) {
-    console.debug('[SpendingTrendChart] points:', labels.length, 'period:', selectedPeriod.value, 'groupBy:', groupBy)
+    console.debug('[SpendingTrendChart] points:', labels.length, 'dateRange:', props.dateRange, 'groupBy:', groupBy)
   }
   return { labels, data, groupBy }
 })
@@ -319,11 +311,11 @@ watch([chartData, chartType, () => chartCanvas.value], () => {
   }
 }, { deep: true })
 
-watch([selectedPeriod], () => {
+watch(() => props.dateRange, () => {
   if (hasData.value) {
     createChart()
   }
-})
+}, { deep: true })
 
 // Lifecycle hooks
 onMounted(async () => {
