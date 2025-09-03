@@ -7,7 +7,8 @@ import {
   createExpense,
   updateExpense,
   deleteExpense,
-  getExpenseSummary
+  getExpenseSummary,
+  clearAllExpenses
 } from '../controllers/expenseController.js';
 
 const router = express.Router();
@@ -23,6 +24,9 @@ router.get('/category/:categoryId', getExpensesByCategory);
 
 // GET /api/expenses/date-range - Get expenses by date range
 router.get('/date-range', getExpensesByDateRange);
+
+// DELETE /api/expenses/clear-all - Clear all expenses
+router.delete('/clear-all', clearAllExpenses);
 
 // GET /api/expenses/:id - Get expense by ID
 router.get('/:id', getExpenseById);

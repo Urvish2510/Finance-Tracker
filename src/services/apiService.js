@@ -150,6 +150,17 @@ export class CategoryService {
       throw error;
     }
   }
+
+  async clearAllCategories() {
+    try {
+      return await apiRequest('/categories/clear-all', {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('Error clearing all categories:', error);
+      throw error;
+    }
+  }
 }
 
 // Expense Service
@@ -233,6 +244,17 @@ export class ExpenseService {
       throw error;
     }
   }
+
+  async clearAllExpenses() {
+    try {
+      return await apiRequest('/expenses/clear-all', {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('Error clearing all expenses:', error);
+      throw error;
+    }
+  }
 }
 
 // Deposit Service
@@ -295,6 +317,17 @@ export class DepositService {
       return await apiRequest('/deposits/summary');
     } catch (error) {
       console.error('Error getting deposit summary:', error);
+      throw error;
+    }
+  }
+
+  async clearAllDeposits() {
+    try {
+      return await apiRequest('/deposits/clear-all', {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('Error clearing all deposits:', error);
       throw error;
     }
   }

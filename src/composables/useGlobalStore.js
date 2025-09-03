@@ -620,6 +620,41 @@ export const useGlobalStore = () => {
       }
     },
     
+    // Clear all data
+    clearAllData: async () => {
+      try {
+        // Clear in the correct order: expenses first (they reference categories), then deposits, then categories
+        const results = {};
+        
+        // Clear expenses first
+        results.expenses = await services.expenses.clearAllExpenses();
+        
+        // Clear deposits
+        results.deposits = await services.deposits.clearAllDeposits();
+        
+        // Clear categories last
+        results.categories = await services.categories.clearAllCategories();
+        
+        // Clear local state
+        state.expenses.data = [];
+        state.deposits.data = [];
+        state.categories.data = [];
+        
+        // Clear cache
+        Object.values(STORAGE_KEYS).forEach(key => {
+          localStorage.removeItem(key);
+        });
+        
+        return {
+          message: 'All data cleared successfully',
+          results
+        };
+      } catch (error) {
+        console.error('❌ Failed to clear all data:', error);
+        throw error;
+      }
+    },
+    
     // Utility functions
     refreshConnection: () => checkConnection(true),
     clearCache: () => {

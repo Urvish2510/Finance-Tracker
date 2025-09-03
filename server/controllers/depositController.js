@@ -71,8 +71,8 @@ export const createDeposit = async (req, res) => {
     const { title, amount, category, date, description, currency } = req.body;
     
     // Validate required fields
-    if (!title || !amount || !category) {
-      return res.status(400).json({ error: 'Title, amount, and category are required' });
+    if (!title || !amount) {
+      return res.status(400).json({ error: 'Title and amount are required' });
     }
     
     // Validate amount
@@ -80,10 +80,12 @@ export const createDeposit = async (req, res) => {
       return res.status(400).json({ error: 'Amount must be a positive number' });
     }
     
-    // Validate category exists
-    const categoryExists = await Category.findById(category);
-    if (!categoryExists) {
-      return res.status(400).json({ error: 'Invalid category' });
+    // Validate category exists (only if provided)
+    if (category) {
+      const categoryExists = await Category.findById(category);
+      if (!categoryExists) {
+        return res.status(400).json({ error: 'Invalid category' });
+      }
     }
     
     // Get user settings for default currency
@@ -92,14 +94,16 @@ export const createDeposit = async (req, res) => {
     const deposit = new Deposit({
       title: title.trim(),
       amount: parseFloat(amount),
-      category,
+      category: category || null,
       date: date || new Date(),
       description: description?.trim() || '',
       currency: currency || settings.currency
     });
     
     const savedDeposit = await deposit.save();
-    await savedDeposit.populate('category', 'name icon color');
+    if (savedDeposit.category) {
+      await savedDeposit.populate('category', 'name icon color');
+    }
     
     res.status(201).json(savedDeposit);
   } catch (error) {
@@ -113,8 +117,8 @@ export const updateDeposit = async (req, res) => {
     const { title, amount, category, date, description, currency } = req.body;
     
     // Validate required fields
-    if (!title || !amount || !category) {
-      return res.status(400).json({ error: 'Title, amount, and category are required' });
+    if (!title || !amount) {
+      return res.status(400).json({ error: 'Title and amount are required' });
     }
     
     // Validate amount
@@ -122,33 +126,36 @@ export const updateDeposit = async (req, res) => {
       return res.status(400).json({ error: 'Amount must be a positive number' });
     }
     
-    // Validate category exists
-    const categoryExists = await Category.findById(category);
-    if (!categoryExists) {
-      return res.status(400).json({ error: 'Invalid category' });
+    // Validate category exists (only if provided)
+    if (category) {
+      const categoryExists = await Category.findById(category);
+      if (!categoryExists) {
+        return res.status(400).json({ error: 'Invalid category' });
+      }
     }
     
-    // Get user settings for default currency
-    const settings = await UserSettings.getOrCreateDefault();
-    
-    const deposit = await Deposit.findByIdAndUpdate(
+    const updatedDeposit = await Deposit.findByIdAndUpdate(
       req.params.id,
       {
         title: title.trim(),
         amount: parseFloat(amount),
-        category,
-        date,
+        category: category || null,
+        date: date || new Date(),
         description: description?.trim() || '',
-        currency: currency || settings.currency
+        currency
       },
       { new: true, runValidators: true }
-    ).populate('category', 'name icon color');
+    );
     
-    if (!deposit) {
+    if (!updatedDeposit) {
       return res.status(404).json({ error: 'Deposit not found' });
     }
     
-    res.json(deposit);
+    if (updatedDeposit.category) {
+      await updatedDeposit.populate('category', 'name icon color');
+    }
+    
+    res.json(updatedDeposit);
   } catch (error) {
     console.error('Error updating deposit:', error);
     res.status(500).json({ error: 'Failed to update deposit' });
@@ -226,5 +233,18 @@ export const getDepositSummary = async (req, res) => {
   } catch (error) {
     console.error('Error getting deposit summary:', error);
     res.status(500).json({ error: 'Failed to get deposit summary' });
+  }
+};
+
+export const clearAllDeposits = async (req, res) => {
+  try {
+    const result = await Deposit.deleteMany({});
+    res.json({ 
+      message: 'All deposits cleared successfully',
+      deletedCount: result.deletedCount 
+    });
+  } catch (error) {
+    console.error('Error clearing all deposits:', error);
+    res.status(500).json({ error: 'Failed to clear all deposits' });
   }
 };
