@@ -311,7 +311,6 @@ const {
   categories,
   expenses,
   deposits,
-  isConnected,
   isLoading: connectionLoading,
   connectionError,
   loadCategories,

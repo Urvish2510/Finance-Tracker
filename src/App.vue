@@ -20,10 +20,6 @@
               >Finance Tracker</span
             >
           </div>
-          <button class="sidebar-toggle" @click="toggleSidebar">
-            <span v-if="sidebarCollapsed">→</span>
-            <span v-else>←</span>
-          </button>
         </div>
 
         <nav class="sidebar-nav">
@@ -42,8 +38,8 @@
           </router-link>
         </nav>
 
-        <div class="sidebar-footer" v-if="!sidebarCollapsed">
-          <div class="app-status">
+        <div class="sidebar-footer">
+          <div class="app-status" v-if="!sidebarCollapsed">
             <div class="status-item">
               <span
                 class="status-dot"
@@ -62,6 +58,10 @@
             </div>
             <span class="version">🎯 {{ config.appTitle }} v1.0 ({{ config.env }})</span>
           </div>
+          <button class="sidebar-toggle sidebar-toggle-bottom" @click="toggleSidebar">
+            <span v-if="sidebarCollapsed">→</span>
+            <span v-else>←</span>
+          </button>
         </div>
       </aside>
 
@@ -376,6 +376,17 @@ const toggleDarkMode = () => toggleTheme()
   background: rgba(255, 255, 255, 0.2);
 }
 
+.sidebar-toggle-bottom {
+  margin-top: var(--space-3);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.sidebar-toggle-bottom:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
 .sidebar-nav {
   flex: 1;
   padding: var(--space-5) 0;
@@ -422,6 +433,9 @@ const toggleDarkMode = () => toggleTheme()
 .sidebar-footer {
   padding: var(--space-5);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .app-status {
@@ -462,6 +476,11 @@ const toggleDarkMode = () => toggleTheme()
 .version {
   font-size: var(--font-size-xs);
   color: rgba(255, 255, 255, 0.7);
+}
+
+/* Collapsed sidebar footer adjustments */
+.sidebar.collapsed .sidebar-footer {
+  padding: var(--space-3);
 }
 
 /* Main Content Styles */

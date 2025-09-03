@@ -148,3 +148,26 @@ export const deleteCategory = async (req, res) => {
     res.status(500).json({ error: 'Failed to delete category' });
   }
 };
+
+export const clearAllCategories = async (req, res) => {
+  try {
+    // Check if there are any expenses that use these categories
+    const expenseCount = await Expense.countDocuments({});
+    
+    if (expenseCount > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot clear categories while expenses exist. Please clear expenses first.',
+        expenseCount 
+      });
+    }
+    
+    const result = await Category.deleteMany({});
+    res.json({ 
+      message: 'All categories cleared successfully',
+      deletedCount: result.deletedCount 
+    });
+  } catch (error) {
+    console.error('Error clearing all categories:', error);
+    res.status(500).json({ error: 'Failed to clear all categories' });
+  }
+};

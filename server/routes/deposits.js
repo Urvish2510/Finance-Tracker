@@ -15,6 +15,9 @@ router.get('/category/:categoryId', depositController.getDepositsByCategory);
 // GET /api/deposits/date-range - Get deposits by date range
 router.get('/date-range', depositController.getDepositsByDateRange);
 
+// DELETE /api/deposits/clear-all - Clear all deposits
+router.delete('/clear-all', depositController.clearAllDeposits);
+
 // GET /api/deposits/:id - Get deposit by ID
 router.get('/:id', depositController.getDepositById);
 

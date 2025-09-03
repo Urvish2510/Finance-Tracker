@@ -217,3 +217,16 @@ export const getExpenseSummary = async (req, res) => {
     res.status(500).json({ error: 'Failed to get expense summary' });
   }
 };
+
+export const clearAllExpenses = async (req, res) => {
+  try {
+    const result = await Expense.deleteMany({});
+    res.json({ 
+      message: 'All expenses cleared successfully',
+      deletedCount: result.deletedCount 
+    });
+  } catch (error) {
+    console.error('Error clearing all expenses:', error);
+    res.status(500).json({ error: 'Failed to clear all expenses' });
+  }
+};
